@@ -6,9 +6,10 @@ import time
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from utils.embeds import error, make_embed, ok
+from utils.fonts import fit_font, get_font
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
 MESSAGE_XP = (15, 25)        # XP aleatoria por mensaje (mín, máx)
@@ -39,13 +40,6 @@ def format_hours(seconds: int) -> str:
     return f"{hours}h {minutes}m"
 
 
-def _font(size: int):
-    try:
-        return ImageFont.load_default(size=size)
-    except TypeError:  # Pillow muy viejo
-        return ImageFont.load_default()
-
-
 def render_card(avatar_bytes: bytes | None, name: str, level: int, xp: int, needed: int, rank: int, total_xp: int) -> io.BytesIO:
     width, height = 800, 240
     img = Image.new("RGB", (width, height), (20, 20, 32))
@@ -59,8 +53,9 @@ def render_card(avatar_bytes: bytes | None, name: str, level: int, xp: int, need
         ImageDraw.Draw(mask).ellipse((0, 0, 150, 150), fill=255)
         img.paste(avatar, (45, 45), mask)
 
-    big, mid, small = _font(40), _font(28), _font(20)
-    draw.text((225, 40), name[:22], font=big, fill=(255, 255, 255))
+    mid, small = get_font(26), get_font(18)
+    name = name[:32]
+    draw.text((225, 40), name, font=fit_font(draw, name, 370, 38, 18), fill=(255, 255, 255))
     draw.text((width - 40, 45), f"Nivel {level}", font=mid, fill=(167, 139, 250), anchor="ra")
     draw.text((width - 40, 85), f"Rank #{rank}", font=small, fill=(180, 180, 200), anchor="ra")
     draw.text((225, 105), f"{total_xp:,} XP totales".replace(",", "."), font=small, fill=(180, 180, 200))
