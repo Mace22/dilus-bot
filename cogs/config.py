@@ -107,6 +107,28 @@ class Config(commands.Cog):
         msg = f"Autorole: {rol.mention}" if rol else "Autorole desactivado."
         await interaction.response.send_message(embed=ok(msg), allowed_mentions=discord.AllowedMentions.none())
 
+    @config.command(name="logs", description="Canal de logs: mensajes borrados/editados, bans, roles... (sin canal = desactivar)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def logs(self, interaction: discord.Interaction, canal: discord.TextChannel | None = None):
+        await self._set_channel(interaction, "log_channel", canal, "Canal de logs")
+
+    @config.command(name="tempvoice", description="Canal de voz 'lobby' que crea canales temporales (sin canal = desactivar)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def tempvoice(self, interaction: discord.Interaction, canal: discord.VoiceChannel | None = None):
+        if canal is not None:
+            perms = interaction.guild.me.guild_permissions
+            if not (perms.manage_channels and perms.move_members):
+                return await interaction.response.send_message(
+                    embed=error("Necesito los permisos **Gestionar canales** y **Mover miembros**."), ephemeral=True
+                )
+        await self.bot.db.set_setting(interaction.guild_id, "tempvoice_channel", canal.id if canal else None)
+        if canal:
+            await interaction.response.send_message(
+                embed=ok(f"Cuando alguien entre a {canal.mention} se le creará un canal de voz propio.")
+            )
+        else:
+            await interaction.response.send_message(embed=ok("Canales temporales desactivados."))
+
     @config.command(name="ver", description="Ver la configuración actual")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def view(self, interaction: discord.Interaction):
@@ -120,13 +142,15 @@ class Config(commands.Cog):
         goodbye = await db.get_setting(gid, "goodbye_channel")
         levelup = await db.get_setting(gid, "levelup_channel")
         autorole = await db.get_setting(gid, "autorole")
-        voice = await db.get_setting(gid, "voice_channel")
+        logs = await db.get_setting(gid, "log_channel")
+        tempvoice = await db.get_setting(gid, "tempvoice_channel")
         embed = make_embed("⚙️ Configuración")
         embed.add_field(name="Bienvenida", value=ch(welcome))
         embed.add_field(name="Despedida", value=ch(goodbye))
         embed.add_field(name="Level up", value=ch(levelup) if levelup else "mismo chat")
         embed.add_field(name="Autorole", value=f"<@&{autorole}>" if autorole else "—")
-        embed.add_field(name="Voz 24/7", value=ch(voice))
+        embed.add_field(name="Logs", value=ch(logs))
+        embed.add_field(name="Voz temporal (lobby)", value=ch(tempvoice))
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
