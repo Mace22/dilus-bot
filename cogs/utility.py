@@ -16,27 +16,34 @@ class Utility(commands.Cog):
         embed = make_embed(f"✨ {BRAND_NAME}", "Estos son mis comandos:")
         embed.add_field(
             name="📈 Niveles",
-            value="`/rank` `/top` `/horas`\nAdmin: `/xp dar` `/xp reset` `/levelrole agregar|quitar|lista`",
+            value="`/rank` `/top` `/horas`\nAdmin: `/xp dar|reset` `/levelrole agregar|quitar|lista`",
             inline=False,
         )
         embed.add_field(
-            name="🎙️ Voz 24/7",
-            value="`/entrar` — entro a tu canal de voz, silenciado, y no me voy\n`/salir` — me voy y dejo de reconectar",
+            name="🤖 IA (Gemini)",
+            value="`/ask` preguntá lo que quieras (o mencioname: @Dilu's Bot)\n`/olvidar` reinicia la charla • `/traducir`",
+            inline=False,
+        )
+        embed.add_field(name="💘 Diversión", value="`/match` compatibilidad entre dos personas • `/encuesta`", inline=False)
+        embed.add_field(
+            name="🪙 Economía",
+            value="`/balance` `/daily` `/trabajar` `/pay` `/ricos`\n`/apostar` `/slots` • `/tienda` `/comprar`\nAdmin: `/economia dar|tienda_agregar|tienda_quitar`",
             inline=False,
         )
         embed.add_field(
-            name="🎁 Extras",
-            value="`/sorteo crear|terminar` `/ticket panel` `/encuesta`",
+            name="🎙️ Voz",
+            value="`/entrar` entro a tu canal, silenciado • `/salir`\nCanales temporales: `/config tempvoice`",
             inline=False,
         )
+        embed.add_field(name="🎁 Comunidad", value="`/sorteo crear|terminar` • `/ticket panel`", inline=False)
         embed.add_field(
             name="🛡️ Moderación",
-            value="`/clear` `/kick` `/ban` `/timeout` `/untimeout`",
+            value="`/clear` `/kick` `/ban` `/timeout` `/untimeout`\n`/warn` `/warns` `/unwarn` `/clearwarns`",
             inline=False,
         )
         embed.add_field(
             name="⚙️ Configuración",
-            value="`/config bienvenida|despedida|levelup|autorole|ver`",
+            value="`/config bienvenida|despedida|levelup|autorole|logs|tempvoice|ver`",
             inline=False,
         )
         embed.add_field(name="🔧 Otros", value="`/ping` `/avatar` `/serverinfo`", inline=False)
