@@ -27,6 +27,7 @@ EXTENSIONS = [
     "cogs.match",
     "cogs.ai",
     "cogs.economy",
+    "cogs.blackjack",
     "cogs.warns",
     "cogs.tempvoice",
     "cogs.utility",
