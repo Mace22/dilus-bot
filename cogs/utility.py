@@ -49,6 +49,18 @@ class Utility(commands.Cog):
         embed.add_field(name="🔧 Otros", value="`/ping` `/avatar` `/serverinfo`\nAdmin: `/diagnostico` (revisa por qué la gente no puede usar el bot)", inline=False)
         await interaction.response.send_message(embed=embed)
 
+    @staticmethod
+    def _describe_target(p: dict, guild: discord.Guild) -> str:
+        """Convierte una regla de Integraciones (rol / miembro / canal) en texto legible."""
+        pid, ptype = int(p["id"]), p.get("type")
+        if ptype == 1:  # rol
+            return "@everyone" if pid == guild.id else f"<@&{pid}>"
+        if ptype == 2:  # miembro
+            return f"<@{pid}>"
+        if ptype == 3:  # canal
+            return "todos los canales" if pid == guild.id - 1 else f"<#{pid}>"
+        return f"`{pid}`"
+
     @app_commands.command(name="diagnostico", description="Revisa por qué la gente no puede usar los comandos del bot")
     @app_commands.guild_only()
     @app_commands.default_permissions(administrator=True)
@@ -70,43 +82,64 @@ class Utility(commands.Cog):
             f"{mark(mine.attach_files)} El bot puede adjuntar archivos (imágenes de /rank, /match, /blackjack)",
         ]
 
-        # Restricciones puestas desde Ajustes del servidor > Integraciones, solo en comandos que son para todos
-        blocked: list[str] = []
+        # Restricciones de Ajustes del servidor > Integraciones (una sola consulta trae todo)
+        app_wide: list[str] = []      # ajuste general del bot: afecta a TODOS los comandos
+        app_blocks_everyone = False
+        per_command: list[str] = []   # comandos públicos bloqueados uno por uno
         problem = None
         try:
-            commands_list = await self.bot.tree.fetch_commands()
-            public = [c for c in commands_list if c.default_member_permissions is None]
-            for cmd in public:
-                try:
-                    cmd_perms = await cmd.fetch_permissions(guild)
-                except discord.NotFound:
-                    continue  # sin restricciones
-                for p in cmd_perms.permissions:
-                    if p.permission is False:
-                        target = "@everyone" if p.id == guild.id else f"<@&{p.id}>" if p.type == discord.AppCommandPermissionType.role else f"`{p.id}`"
-                        blocked.append(f"`/{cmd.name}` bloqueado para {target}")
+            entries = await self.bot.http.get_guild_application_command_permissions(self.bot.application_id, guild.id)
+            by_id = {c.id: c for c in await self.bot.tree.fetch_commands()}
+            for entry in entries:
+                cmd_id = int(entry["id"])
+                rules = entry.get("permissions", [])
+                if cmd_id == self.bot.application_id:
+                    for r in rules:
+                        who = self._describe_target(r, guild)
+                        app_wide.append(f"{'✅ permitido' if r['permission'] else '⛔ bloqueado'}: {who}")
+                        if r["permission"] is False and int(r["id"]) in (guild.id, guild.id - 1):
+                            app_blocks_everyone = True
+                    continue
+                cmd = by_id.get(cmd_id)
+                if cmd is None or cmd.default_member_permissions is not None:
+                    continue  # comando desconocido o de admin: no importa
+                for r in rules:
+                    if r["permission"] is False:
+                        per_command.append(f"`/{cmd.name}` bloqueado para {self._describe_target(r, guild)}")
         except discord.HTTPException:
             problem = "No pude leer las restricciones de Integraciones. Revisalas a mano (ver abajo)."
 
         embed = make_embed("🔎 Diagnóstico")
         embed.add_field(name="Permisos en este canal", value="\n".join(perms_lines), inline=False)
+
         if problem:
             embed.add_field(name="Restricciones en Integraciones", value=problem, inline=False)
-        elif blocked:
-            shown = "\n".join(blocked[:12]) + (f"\n…y {len(blocked) - 12} más" if len(blocked) > 12 else "")
-            embed.add_field(name="Restricciones en Integraciones", value=shown, inline=False)
         else:
-            embed.add_field(name="Restricciones en Integraciones", value="✅ No encontré comandos públicos bloqueados.", inline=False)
+            parts = []
+            if app_wide:
+                parts.append("**Ajuste general del bot (afecta a TODOS los comandos):**\n" + "\n".join(app_wide[:10]))
+            if per_command:
+                shown = "\n".join(per_command[:10]) + (f"\n…y {len(per_command) - 10} más" if len(per_command) > 10 else "")
+                parts.append("**Comandos bloqueados uno por uno:**\n" + shown)
+            embed.add_field(
+                name="Restricciones en Integraciones",
+                value="\n\n".join(parts) if parts else "✅ No encontré restricciones puestas desde Integraciones.",
+                inline=False,
+            )
 
         fixes = []
         if not everyone.view_channel or not everyone.use_application_commands:
             fixes.append("• En este canal (o su categoría): **Permisos → @everyone → activar «Usar comandos de aplicaciones»** (y «Ver canal»).")
-        if blocked:
-            fixes.append("• **Ajustes del servidor → Integraciones → Dilu's Bot**: abrí cada comando marcado y dejalo en «@everyone» (o usá «Restablecer»).")
+        if app_blocks_everyone:
+            fixes.append("• **Ajustes del servidor → Integraciones → Dilu's Bot**: en el ajuste general (arriba de la lista de comandos) dejá a **@everyone** como permitido y «Todos los canales».")
+        if per_command:
+            fixes.append("• En esa misma pantalla, abrí cada comando marcado y dejalo en «@everyone» (o usá «Restablecer»).")
         if not (mine.send_messages and mine.embed_links and mine.attach_files):
             fixes.append("• Dale al bot los permisos que marqué con ❌ en este canal.")
+        if problem:
+            fixes.append("• Entrá a **Ajustes del servidor → Integraciones → Dilu's Bot** y revisá que **@everyone** esté permitido y los comandos no tengan restricciones.")
         if not fixes:
-            fixes.append("• Todo se ve bien acá. Si alguien sigue sin poder, probá `/diagnostico` en el canal donde falla: los permisos cambian de canal en canal.")
+            fixes.append("• Todo se ve bien acá. Si alguien sigue sin poder, ejecutá `/diagnostico` en el canal donde falla: los permisos cambian de canal en canal.")
         embed.add_field(name="Qué hacer", value="\n".join(fixes), inline=False)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
