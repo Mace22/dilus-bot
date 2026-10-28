@@ -16,12 +16,15 @@ log = logging.getLogger("dilus-bot.ai")
 # ---------------------------------------------------------------------------
 # Configuración (casi todo se cambia con variables de entorno, sin tocar código)
 #   GEMINI_API_KEY        -> tu API key de https://aistudio.google.com/apikey  (obligatoria)
-#   GEMINI_MODEL          -> modelo a usar (por defecto el de abajo)
+#   GEMINI_MODEL          -> modelo(s) a usar. Podés poner varios separados por coma: si el primero
+#                            está saturado, el bot prueba con el siguiente automáticamente.
+#                            Ej: gemini-3.5-flash-lite,gemini-3.1-flash-lite
 #   GEMINI_MAX_TOKENS     -> largo máximo de cada respuesta
 #   GEMINI_SYSTEM_PROMPT  -> personalidad del bot (opcional)
 # ---------------------------------------------------------------------------
 API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-DEFAULT_MODEL = "gemini-3.8-flash"
+# Orden de prueba por defecto (todos tienen cupo gratis). Los "lite" son más livianos y se saturan menos.
+DEFAULT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]
 HISTORY_TURNS = 6          # cuántos intercambios recuerda por persona
 HISTORY_TTL = 30 * 60      # olvida la charla tras 30 min sin hablar
 DEFAULT_SYSTEM_PROMPT = (
@@ -37,6 +40,10 @@ NO_PINGS = discord.AllowedMentions.none()
 
 class GeminiError(Exception):
     """Error con un mensaje listo para mostrarle a la persona."""
+
+
+class ModelBusy(GeminiError):
+    """Este modelo no responde ahora (saturado, sin cupo, no existe...): se puede probar con el siguiente."""
 
 
 def chunk_text(text: str, size: int = 3900) -> list[str]:
@@ -60,7 +67,7 @@ def extract_text(data) -> str:
     if not candidates:
         if (data.get("promptFeedback") or {}).get("blockReason"):
             raise GeminiError("Gemini bloqueó ese pedido por sus filtros de seguridad.")
-        raise GeminiError("Gemini no devolvió respuesta. Probá de nuevo.")
+        raise ModelBusy("Gemini no devolvió respuesta. Probá de nuevo.")
     cand = candidates[0]
     parts = (cand.get("content") or {}).get("parts") or []
     text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought"))
@@ -71,14 +78,15 @@ def extract_text(data) -> str:
         raise GeminiError("Gemini bloqueó esa respuesta por sus filtros de seguridad.")
     if reason == "MAX_TOKENS":
         raise GeminiError("La respuesta se quedó sin espacio. Probá con una pregunta más corta.")
-    raise GeminiError("Gemini no devolvió texto. Probá de nuevo.")
+    raise ModelBusy("Gemini no devolvió texto. Probá de nuevo.")
 
 
 class AI(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.model = os.getenv("GEMINI_MODEL", "").strip() or DEFAULT_MODEL
+        env_models = [m.strip() for m in os.getenv("GEMINI_MODEL", "").split(",") if m.strip()]
+        self.models = env_models or list(DEFAULT_MODELS)
         self.system_prompt = os.getenv("GEMINI_SYSTEM_PROMPT", "").strip() or DEFAULT_SYSTEM_PROMPT
         try:
             self.max_tokens = int(os.getenv("GEMINI_MAX_TOKENS", "2048"))
@@ -90,11 +98,11 @@ class AI(commands.Cog):
         self._mention_cd: dict[int, float] = {}
 
     async def cog_load(self):
-        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60))
+        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
         if not self.api_key:
             log.warning("GEMINI_API_KEY no está configurada: los comandos de IA van a avisar que falta la clave.")
         else:
-            log.info("IA lista (modelo: %s)", self.model)
+            log.info("IA lista (modelos, en orden de prueba: %s)", " -> ".join(self.models))
 
     async def cog_unload(self):
         if self.session:
@@ -104,15 +112,30 @@ class AI(commands.Cog):
     # Llamada a Gemini
     # ------------------------------------------------------------------
     async def generate(self, contents: list[dict], system: str | None = None) -> str:
+        """Pide la respuesta probando cada modelo en orden hasta que uno responda."""
         if not self.api_key:
             raise GeminiError("La IA no está configurada todavía (falta `GEMINI_API_KEY` en el hosting).")
 
-        url = f"{API_BASE}/{self.model}:generateContent"
         body = {
             "system_instruction": {"parts": [{"text": system or self.system_prompt}]},
             "contents": contents,
             "generationConfig": {"maxOutputTokens": self.max_tokens},
         }
+        last_error: GeminiError | None = None
+        for i, model in enumerate(self.models):
+            try:
+                text = await self._request(model, body)
+            except ModelBusy as e:
+                last_error = e
+                log.warning("Modelo %s no disponible (%s)%s", model, e, ", probando el siguiente..." if i < len(self.models) - 1 else "")
+                continue
+            if i > 0:
+                log.info("Respondió el modelo de respaldo %s", model)
+            return text
+        raise last_error or GeminiError("Gemini no respondió. Probá de nuevo.")
+
+    async def _request(self, model: str, body: dict) -> str:
+        url = f"{API_BASE}/{model}:generateContent"
         try:
             async with self.session.post(url, json=body, headers={"x-goog-api-key": self.api_key}) as resp:
                 status = resp.status
@@ -121,24 +144,24 @@ class AI(commands.Cog):
                 except ValueError:
                     data = {}
         except asyncio.TimeoutError:
-            raise GeminiError("Gemini tardó demasiado en responder. Probá de nuevo.")
+            raise ModelBusy("Gemini tardó demasiado en responder.")
         except aiohttp.ClientError:
-            raise GeminiError("No pude conectarme con Gemini. Probá de nuevo en un rato.")
+            raise ModelBusy("No pude conectarme con Gemini.")
 
         if status != 200:
             detail = ""
             if isinstance(data, dict):
                 detail = str((data.get("error") or {}).get("message", ""))
-            log.warning("Gemini respondió HTTP %s (modelo %s): %s", status, self.model, detail[:300])
+            log.warning("Gemini respondió HTTP %s (modelo %s): %s", status, model, detail[:300])
             if status in (401, 403) or (status == 400 and "api key" in detail.lower()):
-                raise GeminiError("La API key de Gemini no es válida o no tiene permiso.")
+                raise GeminiError("La API key de Gemini no es válida o no tiene permiso.")  # no sirve probar otro modelo
             if status == 404:
-                raise GeminiError(f"El modelo `{self.model}` no existe o ya no está disponible. Cambiá `GEMINI_MODEL`.")
+                raise ModelBusy(f"el modelo `{model}` no existe o ya no está disponible")
             if status == 429:
-                raise GeminiError("Se alcanzó el límite de uso de Gemini. Esperá un momento y probá de nuevo.")
+                raise ModelBusy("Se alcanzó el límite de uso de Gemini. Esperá un momento y probá de nuevo.")
             if status >= 500:
-                raise GeminiError("Gemini está con problemas ahora mismo. Probá más tarde.")
-            raise GeminiError("Gemini rechazó el pedido.")
+                raise ModelBusy("Gemini está saturado en este momento. Probá de nuevo en un minuto.")
+            raise ModelBusy("Gemini rechazó el pedido.")
 
         return extract_text(data)
 
