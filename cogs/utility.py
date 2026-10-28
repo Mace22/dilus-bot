@@ -27,7 +27,7 @@ class Utility(commands.Cog):
         embed.add_field(name="💘 Diversión", value="`/match` compatibilidad entre dos personas • `/encuesta`", inline=False)
         embed.add_field(
             name="🪙 Economía",
-            value="`/balance` `/daily` `/trabajar` `/pay` `/ricos`\n`/apostar` `/slots` • `/tienda` `/comprar`\nAdmin: `/economia dar|tienda_agregar|tienda_quitar`",
+            value="`/balance` `/daily` `/trabajar` `/pay` `/ricos`\n`/apostar` `/slots` `/blackjack` • `/tienda` `/comprar`\nAdmin: `/economia dar|tienda_agregar|tienda_quitar`",
             inline=False,
         )
         embed.add_field(
