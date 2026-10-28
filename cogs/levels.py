@@ -315,7 +315,8 @@ class Levels(commands.Cog):
         )
         await interaction.response.send_message(embed=ok(f"Se quitó la recompensa del nivel **{nivel}**."))
 
-    @levelrole.command(name="lista", description="Ver las recompensas configuradas")
+    @app_commands.command(name="recompensas", description="Mirá qué roles se ganan al subir de nivel")
+    @app_commands.guild_only()
     async def levelrole_list(self, interaction: discord.Interaction):
         rows = await self.bot.db.fetchall(
             "SELECT level, role_id FROM level_roles WHERE guild_id = ? ORDER BY level", (interaction.guild_id,)
