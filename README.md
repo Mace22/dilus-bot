@@ -9,6 +9,7 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 | 📈 **Niveles** (XP por mensajes **y por tiempo en voz**) | `/rank` (tarjeta con imagen), `/top` (nivel u horas en voz), `/horas`, `/xp dar\|reset`, `/levelrole agregar\|quitar\|lista` |
 | 🤖 **IA con Gemini** | `/ask`, `/olvidar`, `/traducir` y también charlás **mencionando al bot** (`@Dilu's Bot hola`). Recuerda la charla de cada persona |
 | 💘 **Match** | `/match usuario1 [usuario2]` → imagen con los dos avatares, corazón que se llena y % de compatibilidad (siempre da lo mismo para la misma pareja) |
+| 🃏 **Blackjack** | `/blackjack apuesta` → mesa con cartas en imagen que ve todo el chat. Botones **Pedir / Plantarse / Doblar**, el dealer se planta en 17, el Blackjack paga 3:2 y hay botón para jugar otra mano. Se juega con las monedas de la economía |
 | 🪙 **Economía** | `/balance`, `/daily` (con racha), `/trabajar`, `/pay`, `/ricos`, `/apostar`, `/slots`, `/tienda`, `/comprar`. Se ganan monedas también chateando |
 | 🎙️ **Voz 24/7** | `/entrar` (entra a tu canal **silenciado y ensordecido** y se queda siempre; si algo lo saca, vuelve solo), `/salir` |
 | 🔊 **Canales de voz temporales** | Entrás a un canal "lobby" y se crea uno propio que se borra solo al quedar vacío (`/config tempvoice`) |
@@ -34,8 +35,11 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 2. **Create API key** y copiala.
 3. Cargala como variable `GEMINI_API_KEY` en el hosting (o en el `.env`).
 
-El modelo por defecto es `gemini-3.8-flash`. Si Google lo cambia o lo retira, no hace falta tocar código:
-poné otro nombre en la variable `GEMINI_MODEL` (podés ver los vigentes en https://ai.google.dev/gemini-api/docs/models).
+Por defecto el bot prueba estos modelos **en orden** (todos tienen cupo gratis): `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` → `gemini-3.6-flash`.
+Si uno está saturado, sin cupo o ya no existe, pasa solo al siguiente.
+Podés elegir tus propios modelos con la variable `GEMINI_MODEL` (uno o varios separados por coma), por ejemplo
+`gemini-3.5-flash-lite,gemini-3.1-flash-lite`. Los vigentes están en https://ai.google.dev/gemini-api/docs/models.
+(Los modelos `2.5` ya no sirven: Google los apagó el 16 de octubre de 2026.)
 Si no cargás la key, el resto del bot funciona normal y `/ask` avisa que falta configurarla.
 
 ## 3. Subirlo a GitHub
@@ -83,6 +87,7 @@ Si el modo presencia no te funciona, podés volver a la conexión de voz complet
 
 - **XP, cooldown y mínimo de personas para XP de voz:** arriba de `cogs/levels.py`.
 - **Monedas (recompensas, apuestas, cooldowns):** arriba de `cogs/economy.py`.
+- **Blackjack (apuesta mínima/máxima, mazos, velocidad del dealer):** arriba de `cogs/blackjack.py`.
 - **Límite de warns y duración del timeout automático:** arriba de `cogs/warns.py`.
 - **Color y nombre de los embeds:** `utils/embeds.py`.
 - **Personalidad de la IA:** variable `GEMINI_SYSTEM_PROMPT`.
