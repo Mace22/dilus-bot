@@ -81,15 +81,25 @@ CREATE TABLE IF NOT EXISTS temp_voice (
     guild_id INTEGER NOT NULL,
     owner_id INTEGER NOT NULL
 );
+
+-- Apuestas de la ruleta que todavÃ­a no se resolvieron (si el bot se reinicia, se devuelven)
+CREATE TABLE IF NOT EXISTS roulette_bets (
+    message_id INTEGER NOT NULL,
+    guild_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    bet_key TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    PRIMARY KEY (message_id, user_id, bet_key)
+);
 """
 
-# Columnas agregadas después de la primera versión (se añaden solas a bases ya existentes)
+# Columnas agregadas despuÃ©s de la primera versiÃ³n (se aÃ±aden solas a bases ya existentes)
 MIGRATIONS = {
     "log_channel": "INTEGER",
     "tempvoice_channel": "INTEGER",
 }
 
-# Columnas permitidas en guild_settings (evita inyección SQL en set_setting)
+# Columnas permitidas en guild_settings (evita inyecciÃ³n SQL en set_setting)
 SETTINGS = {
     "welcome_channel",
     "goodbye_channel",
@@ -117,7 +127,7 @@ class Database:
         await self.conn.commit()
 
     async def _migrate(self):
-        """Agrega columnas nuevas a tablas que ya existían (sin perder datos)."""
+        """Agrega columnas nuevas a tablas que ya existÃ­an (sin perder datos)."""
         async with self.conn.execute("PRAGMA table_info(guild_settings)") as cur:
             existing = {row["name"] for row in await cur.fetchall()}
         for column, col_type in MIGRATIONS.items():
