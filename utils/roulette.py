@@ -1,7 +1,7 @@
-"""Lógica y gráficos de la ruleta europea (37 casilleros: 0 a 36).
+"""LÃ³gica y grÃ¡ficos de la ruleta europea (37 casilleros: 0 a 36).
 
-Este archivo no usa nada de Discord: solo reglas, pagos y dibujo de imágenes con Pillow.
-El comando y los botones están en cogs/roulette.py.
+Este archivo no usa nada de Discord: solo reglas, pagos y dibujo de imÃ¡genes con Pillow.
+El comando y los botones estÃ¡n en cogs/roulette.py.
 """
 import io
 import math
@@ -25,7 +25,7 @@ STEP = 360 / 37
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 
 COLOR_NAME = {"red": "Rojo", "black": "Negro", "green": "Verde"}
-COLOR_EMOJI = {"red": "🔴", "black": "⚫", "green": "🟢"}
+COLOR_EMOJI = {"red": "ðŸ”´", "black": "âš«", "green": "ðŸŸ¢"}
 
 
 def color_of(n: int) -> str:
@@ -40,8 +40,8 @@ class BetType:
     label: str      # nombre corto
     emoji: str
     mult: int       # monedas que se devuelven por cada moneda apostada (ganancia + apuesta)
-    count: int      # cuántos números (de 37) cubre
-    hint: str       # explicación cortita
+    count: int      # cuÃ¡ntos nÃºmeros (de 37) cubre
+    hint: str       # explicaciÃ³n cortita
 
     @property
     def ratio(self) -> int:
@@ -56,29 +56,29 @@ class BetType:
 BET_TYPES: dict[str, BetType] = {
     b.key: b
     for b in [
-        BetType("red", "Rojo", "🔴", 2, 18, "Salen los 18 números rojos"),
-        BetType("black", "Negro", "⚫", 2, 18, "Salen los 18 números negros"),
-        BetType("even", "Par", "2️⃣", 2, 18, "Números pares (el 0 no cuenta)"),
-        BetType("odd", "Impar", "1️⃣", 2, 18, "Números impares"),
-        BetType("low", "1-18 (baja)", "⬇️", 2, 18, "Del 1 al 18"),
-        BetType("high", "19-36 (alta)", "⬆️", 2, 18, "Del 19 al 36"),
-        BetType("doc1", "1ª docena (1-12)", "🥇", 3, 12, "Del 1 al 12"),
-        BetType("doc2", "2ª docena (13-24)", "🥈", 3, 12, "Del 13 al 24"),
-        BetType("doc3", "3ª docena (25-36)", "🥉", 3, 12, "Del 25 al 36"),
-        BetType("col1", "Columna 1", "1️⃣", 3, 12, "1, 4, 7 … 34"),
-        BetType("col2", "Columna 2", "2️⃣", 3, 12, "2, 5, 8 … 35"),
-        BetType("col3", "Columna 3", "3️⃣", 3, 12, "3, 6, 9 … 36"),
+        BetType("red", "Rojo", "ðŸ”´", 2, 18, "Salen los 18 nÃºmeros rojos"),
+        BetType("black", "Negro", "âš«", 2, 18, "Salen los 18 nÃºmeros negros"),
+        BetType("even", "Par", "2ï¸âƒ£", 2, 18, "NÃºmeros pares (el 0 no cuenta)"),
+        BetType("odd", "Impar", "1ï¸âƒ£", 2, 18, "NÃºmeros impares"),
+        BetType("low", "1-18 (baja)", "â¬‡ï¸", 2, 18, "Del 1 al 18"),
+        BetType("high", "19-36 (alta)", "â¬†ï¸", 2, 18, "Del 19 al 36"),
+        BetType("doc1", "1Âª docena (1-12)", "ðŸ¥‡", 3, 12, "Del 1 al 12"),
+        BetType("doc2", "2Âª docena (13-24)", "ðŸ¥ˆ", 3, 12, "Del 13 al 24"),
+        BetType("doc3", "3Âª docena (25-36)", "ðŸ¥‰", 3, 12, "Del 25 al 36"),
+        BetType("col1", "Columna 1", "1ï¸âƒ£", 3, 12, "1, 4, 7 â€¦ 34"),
+        BetType("col2", "Columna 2", "2ï¸âƒ£", 3, 12, "2, 5, 8 â€¦ 35"),
+        BetType("col3", "Columna 3", "3ï¸âƒ£", 3, 12, "3, 6, 9 â€¦ 36"),
     ]
 }
-STRAIGHT = BetType("straight", "Número pleno", "🎯", 36, 1, "Elegís un número del 0 al 36")
+STRAIGHT = BetType("straight", "NÃºmero pleno", "ðŸŽ¯", 36, 1, "ElegÃ­s un nÃºmero del 0 al 36")
 OUTSIDE = ["low", "even", "red", "black", "odd", "high"]   # orden en el tablero
 
 
 def bet_info(key: str) -> BetType:
-    """Datos de una apuesta. Los números se guardan como 'n17'."""
+    """Datos de una apuesta. Los nÃºmeros se guardan como 'n17'."""
     if key.startswith("n"):
         n = int(key[1:])
-        return BetType(key, f"Número {n}", COLOR_EMOJI[color_of(n)], 36, 1, f"Solo gana si sale el {n}")
+        return BetType(key, f"NÃºmero {n}", COLOR_EMOJI[color_of(n)], 36, 1, f"Solo gana si sale el {n}")
     return BET_TYPES[key]
 
 
@@ -107,25 +107,25 @@ def wins(key: str, number: int) -> bool:
 
 
 def payout(key: str, amount: int, number: int) -> int:
-    """Total que se le devuelve a la persona por esta apuesta (0 si perdió)."""
+    """Total que se le devuelve a la persona por esta apuesta (0 si perdiÃ³)."""
     return amount * bet_info(key).mult if wins(key, number) else 0
 
 
 def number_tags(n: int) -> list[str]:
-    """Descripción de un número: ['Negro', 'Impar', 'Baja (1-18)', '2ª docena', 'Columna 2']."""
+    """DescripciÃ³n de un nÃºmero: ['Negro', 'Impar', 'Baja (1-18)', '2Âª docena', 'Columna 2']."""
     if n == 0:
         return ["Cero (verde)"]
     return [
         COLOR_NAME[color_of(n)],
         "Par" if n % 2 == 0 else "Impar",
         "Baja (1-18)" if n <= 18 else "Alta (19-36)",
-        f"{1 if n <= 12 else 2 if n <= 24 else 3}ª docena",
+        f"{1 if n <= 12 else 2 if n <= 24 else 3}Âª docena",
         f"Columna {(n - 1) % 3 + 1}",
     ]
 
 
 def spin() -> int:
-    """Número ganador (usa el generador seguro del sistema operativo)."""
+    """NÃºmero ganador (usa el generador seguro del sistema operativo)."""
     return random.SystemRandom().randrange(37)
 
 
@@ -177,12 +177,12 @@ def _felt(w: int, h: int) -> Image.Image:
 
 
 def zone_rect(key: str) -> tuple[int, int, int, int]:
-    """Rectángulo (x0, y0, x1, y1) de cada zona apostable del tablero."""
+    """RectÃ¡ngulo (x0, y0, x1, y1) de cada zona apostable del tablero."""
     if key.startswith("n"):
         n = int(key[1:])
         if n == 0:
             return MX, Y0, MX + CELL, Y0 + 3 * CELL_H
-        c, r = (n - 1) // 3, 2 - (n - 1) % 3          # fila de arriba: 3, 6, 9 … 36
+        c, r = (n - 1) // 3, 2 - (n - 1) % 3          # fila de arriba: 3, 6, 9 â€¦ 36
         x, y = MX + CELL * (1 + c), Y0 + r * CELL_H
         return x, y, x + CELL, y + CELL_H
     if key.startswith("col"):
@@ -214,12 +214,12 @@ def _draw_chip(img: Image.Image, cx: int, cy: int, amount: int, r: int = 19):
 
 
 def render_board(chips: dict[str, int], history: list[int], number: int | None = None, status: str | None = None) -> io.BytesIO:
-    """Dibuja el paño de la ruleta.
+    """Dibuja el paÃ±o de la ruleta.
 
     chips:   {zona: monedas apostadas en total}  (se dibujan como fichas)
-    history: últimos números que salieron (el último es el más reciente)
-    number:  si ya salió un número, se marcan las zonas ganadoras
-    status:  texto de la etiqueta del centro cuando todavía no salió nada
+    history: Ãºltimos nÃºmeros que salieron (el Ãºltimo es el mÃ¡s reciente)
+    number:  si ya saliÃ³ un nÃºmero, se marcan las zonas ganadoras
+    status:  texto de la etiqueta del centro cuando todavÃ­a no saliÃ³ nada
     """
     img = _felt(W, H)
     d = ImageDraw.Draw(img)
@@ -231,7 +231,7 @@ def render_board(chips: dict[str, int], history: list[int], number: int | None =
 
     pill_text, pill_color = None, None
     if number is not None:
-        pill_text, pill_color = f"{number}  ·  {COLOR_NAME[color_of(number)].upper()}", COLOR_RGB[color_of(number)]
+        pill_text, pill_color = f"{number}  Â·  {COLOR_NAME[color_of(number)].upper()}", COLOR_RGB[color_of(number)]
     elif status:
         pill_text, pill_color = status, (34, 150, 80)
     if pill_text:
@@ -244,7 +244,7 @@ def render_board(chips: dict[str, int], history: list[int], number: int | None =
     recent = history[-8:]
     if recent:
         x0 = W - MX - (len(recent) * 36 - 6)
-        d.text((x0, 27), "ÚLTIMOS", font=get_font(13), fill=GOLD_LIGHT + (200,), anchor="lm")
+        d.text((x0, 27), "ÃšLTIMOS", font=get_font(13), fill=GOLD_LIGHT + (200,), anchor="lm")
         for i, n in enumerate(recent):
             cx, cy = x0 + i * 36 + 15, 53
             d.ellipse((cx - 15, cy - 15, cx + 15, cy + 15), fill=COLOR_RGB[color_of(n)] + (255,), outline=(255, 255, 255, 220), width=2)
@@ -264,7 +264,7 @@ def render_board(chips: dict[str, int], history: list[int], number: int | None =
         d.rectangle(rect, outline=LINE + (255,), width=2)
         d.text(_center(rect), "2:1", font=get_font(20), fill=GOLD_LIGHT + (255,), anchor="mm")
 
-    for k, label in zip((1, 2, 3), ("1ª DOCENA", "2ª DOCENA", "3ª DOCENA")):
+    for k, label in zip((1, 2, 3), ("1Âª DOCENA", "2Âª DOCENA", "3Âª DOCENA")):
         rect = zone_rect(f"doc{k}")
         d.rectangle(rect, outline=LINE + (255,), width=2)
         d.text((_center(rect)[0] - (22 if f"doc{k}" in chips else 0), _center(rect)[1]), label, font=get_font(21), fill="white", anchor="mm")
@@ -310,9 +310,9 @@ def render_board(chips: dict[str, int], history: list[int], number: int | None =
 
     # ---- pie ----
     d = ImageDraw.Draw(img)
-    d.text((W // 2, 392), "PAGOS   ·   Número 35:1   ·   Docena / Columna 2:1   ·   Color, Par/Impar, 1-18 / 19-36  1:1",
+    d.text((W // 2, 392), "PAGOS   Â·   NÃºmero 35:1   Â·   Docena / Columna 2:1   Â·   Color, Par/Impar, 1-18 / 19-36  1:1",
            font=get_font(16), fill=GOLD_LIGHT + (255,), anchor="mm")
-    d.text((W // 2, 420), "El 0 es verde: solo gana quien apostó al 0. Las demás apuestas pierden.",
+    d.text((W // 2, 420), "El 0 es verde: solo gana quien apostÃ³ al 0. Las demÃ¡s apuestas pierden.",
            font=get_font(15), fill=(200, 220, 205, 255), anchor="mm")
 
     buf = io.BytesIO()
@@ -330,7 +330,7 @@ WHEEL_SIZE = 360    # rueda dentro del lienzo
 
 @lru_cache(maxsize=2)
 def _wheel_base(size: int) -> Image.Image:
-    """Rueda dibujada una sola vez (con suavizado); después solo se rota."""
+    """Rueda dibujada una sola vez (con suavizado); despuÃ©s solo se rota."""
     ss = 2
     s = size * ss
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -365,11 +365,11 @@ def _wheel_base(size: int) -> Image.Image:
         d.line([(c, c), (c + r_in * 0.55 * math.cos(a), c + r_in * 0.55 * math.sin(a))], fill=GOLD + (255,), width=5 * ss)
     circle(r_in * 0.14, fill=GOLD_LIGHT + (255,), outline=GOLD + (255,), width=ss)
 
-    # números: el texto se lee a lo largo del radio
+    # nÃºmeros: el texto se lee a lo largo del radio
     font = get_font(int(big * 0.105))
     r_text = big * 0.675
     for i, n in enumerate(WHEEL_ORDER):
-        a = 90 - i * STEP                                       # ángulo matemático (antihorario)
+        a = 90 - i * STEP                                       # Ã¡ngulo matemÃ¡tico (antihorario)
         tile = Image.new("RGBA", (120, 60), (0, 0, 0, 0))
         ImageDraw.Draw(tile).text((60, 30), str(n), font=font, fill=(255, 255, 255, 255), anchor="mm")
         tile = tile.rotate(a, expand=True, resample=Image.BICUBIC)
@@ -382,7 +382,7 @@ def _wheel_base(size: int) -> Image.Image:
 
 @lru_cache(maxsize=1)
 def _ball_sprite() -> Image.Image:
-    """Bola con sombra. El centro de la bola está en (13, 12)."""
+    """Bola con sombra. El centro de la bola estÃ¡ en (13, 12)."""
     k = 4
     w = 30 * k
     shadow = Image.new("RGBA", (w, w), (0, 0, 0, 0))
@@ -422,7 +422,7 @@ def render_spin_gif(number: int, frames: int = 46) -> io.BytesIO:
     off = (GIF_SIZE - WHEEL_SIZE) // 2
 
     idx = WHEEL_ORDER.index(number)
-    pocket = 90 - idx * STEP            # ángulo del casillero dentro de la rueda
+    pocket = 90 - idx * STEP            # Ã¡ngulo del casillero dentro de la rueda
     wheel_start = random.uniform(0, 360)
     laps_wheel, laps_ball = 0.6, 3.6    # la rueda gira hacia un lado y la bola hacia el otro
     r_track, r_pocket = half * 0.855, half * 0.675
@@ -447,7 +447,7 @@ def render_spin_gif(number: int, frames: int = 46) -> io.BytesIO:
         frame.alpha_composite(ball, (int(round(bx - 13)), int(round(by - 12))))
         out.append(frame)
 
-    # último cuadro: cartel con el número ganador en el centro de la rueda
+    # Ãºltimo cuadro: cartel con el nÃºmero ganador en el centro de la rueda
     final = out[-1].copy()
     fd = ImageDraw.Draw(final)
     rb = half * 0.27
