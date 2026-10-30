@@ -91,6 +91,26 @@ CREATE TABLE IF NOT EXISTS roulette_bets (
     amount INTEGER NOT NULL,
     PRIMARY KEY (message_id, user_id, bet_key)
 );
+
+-- Panel web: manos de blackjack abiertas (si el bot se reinicia, se devuelven)
+CREATE TABLE IF NOT EXISTS web_blackjack (
+    guild_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    bet INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+-- Panel web: estadÃ­sticas de casino por persona
+CREATE TABLE IF NOT EXISTS casino_stats (
+    guild_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    game TEXT NOT NULL,
+    played INTEGER NOT NULL DEFAULT 0,
+    wagered INTEGER NOT NULL DEFAULT 0,
+    returned INTEGER NOT NULL DEFAULT 0,
+    best INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id, game)
+);
 """
 
 # Columnas agregadas despuÃ©s de la primera versiÃ³n (se aÃ±aden solas a bases ya existentes)
