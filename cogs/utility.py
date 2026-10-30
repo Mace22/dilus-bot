@@ -35,6 +35,7 @@ class Utility(commands.Cog):
             value="`/entrar` entro a tu canal, silenciado â€¢ `/salir`\nCanales temporales: `/config tempvoice`",
             inline=False,
         )
+        embed.add_field(name="ðŸŒ Panel web", value="`/panel` tu economÃ­a, stats, ruleta y blackjack desde el navegador", inline=False)
         embed.add_field(name="ðŸŽ Comunidad", value="`/sorteo crear|terminar` â€¢ `/ticket panel`", inline=False)
         embed.add_field(
             name="ðŸ›¡ï¸ ModeraciÃ³n",
