@@ -13,12 +13,12 @@ from utils.embeds import error, ok
 
 log = logging.getLogger("dilus-bot.roulette")
 
-# ---------- Configuración (tocá estos valores a gusto) ----------
-COIN = "🪙"
+# ---------- ConfiguraciÃ³n (tocÃ¡ estos valores a gusto) ----------
+COIN = "ðŸª™"
 MIN_BET, MAX_BET = 10, 10_000   # por cada apuesta
 MAX_BETS_PER_PLAYER = 8         # apuestas distintas que puede tener una persona por ronda
 BET_TIME = 45                   # segundos que la mesa queda abierta (se puede cambiar en /ruleta)
-SPIN_WAIT = 6.5                 # segundos que dura la animación antes de mostrar el resultado
+SPIN_WAIT = 6.5                 # segundos que dura la animaciÃ³n antes de mostrar el resultado
 GOLD = 0xD4AF37
 # -----------------------------------------------------------------
 
@@ -78,15 +78,15 @@ class Table:
 class BetModal(discord.ui.Modal):
     def __init__(self, cog: "Roulette", table: Table, key: str):
         straight = key == "straight"
-        title = "Apostar a un número" if straight else f"Apostar · {rl.bet_info(key).label}"
+        title = "Apostar a un nÃºmero" if straight else f"Apostar Â· {rl.bet_info(key).label}"
         super().__init__(title=title[:45])
         self.cog, self.table, self.key = cog, table, key
         self.number: discord.ui.TextInput | None = None
         if straight:
-            self.number = discord.ui.TextInput(label="Número (del 0 al 36)", placeholder="Ej: 17", min_length=1, max_length=2)
+            self.number = discord.ui.TextInput(label="NÃºmero (del 0 al 36)", placeholder="Ej: 17", min_length=1, max_length=2)
             self.add_item(self.number)
         self.amount = discord.ui.TextInput(
-            label=f"Monedas a apostar ({MIN_BET}-{fmt(MAX_BET)})", placeholder="Ej: 500  (también vale 1k)", min_length=1, max_length=9
+            label=f"Monedas a apostar ({MIN_BET}-{fmt(MAX_BET)})", placeholder="Ej: 500  (tambiÃ©n vale 1k)", min_length=1, max_length=9
         )
         self.add_item(self.amount)
 
@@ -98,13 +98,13 @@ class BetModal(discord.ui.Modal):
             except ValueError:
                 n = -1
             if not 0 <= n <= 36:
-                return await interaction.response.send_message(embed=error("El número tiene que ser del 0 al 36."), ephemeral=True)
+                return await interaction.response.send_message(embed=error("El nÃºmero tiene que ser del 0 al 36."), ephemeral=True)
             key = f"n{n}"
 
         amount = parse_amount(self.amount.value)
         if amount is None:
             return await interaction.response.send_message(
-                embed=error("No entendí el monto. Escribí solo números, por ejemplo `500` o `1k`."), ephemeral=True
+                embed=error("No entendÃ­ el monto. EscribÃ­ solo nÃºmeros, por ejemplo `500` o `1k`."), ephemeral=True
             )
         if not MIN_BET <= amount <= MAX_BET:
             return await interaction.response.send_message(
@@ -120,12 +120,12 @@ class BetModal(discord.ui.Modal):
         mine = self.table.bets[interaction.user.id]
         total_here = mine[key]
         saldo = await self.cog.eco.balance(self.table.guild_id, interaction.user.id)
-        extra = f" (ahora tenés **{fmt(total_here)}** en esa apuesta)" if total_here > amount else ""
+        extra = f" (ahora tenÃ©s **{fmt(total_here)}** en esa apuesta)" if total_here > amount else ""
         text = (
             f"Apostaste **{fmt(amount)}** {COIN} a {info.emoji} **{info.label}**{extra}\n"
-            f"Si sale, cobrás **{fmt(total_here * info.mult)}** {COIN} (ganás **+{fmt(total_here * info.ratio)}**) · "
+            f"Si sale, cobrÃ¡s **{fmt(total_here * info.mult)}** {COIN} (ganÃ¡s **+{fmt(total_here * info.ratio)}**) Â· "
             f"Chances: **{rl.pct(info.count)}**\n"
-            f"Total en la mesa: **{fmt(sum(mine.values()))}** {COIN} · Te quedan **{fmt(saldo)}** {COIN}"
+            f"Total en la mesa: **{fmt(sum(mine.values()))}** {COIN} Â· Te quedan **{fmt(saldo)}** {COIN}"
         )
         await interaction.followup.send(embed=ok(text), ephemeral=True)
 
@@ -133,7 +133,7 @@ class BetModal(discord.ui.Modal):
 def _select_options() -> list[discord.SelectOption]:
     options = []
     for b in [*rl.BET_TYPES.values(), rl.STRAIGHT]:
-        desc = f"Paga {b.ratio}:1 · {rl.pct(b.count)} · {b.hint}"
+        desc = f"Paga {b.ratio}:1 Â· {rl.pct(b.count)} Â· {b.hint}"
         options.append(discord.SelectOption(label=b.label, value=b.key, description=desc[:100], emoji=b.emoji))
     return options
 
@@ -147,26 +147,26 @@ class RouletteView(discord.ui.View):
         self.table = table
 
     async def _closed(self, interaction: discord.Interaction):
-        await interaction.response.send_message(embed=error("La mesa ya cerró. ¡Esperá la próxima ronda!"), ephemeral=True)
+        await interaction.response.send_message(embed=error("La mesa ya cerrÃ³. Â¡EsperÃ¡ la prÃ³xima ronda!"), ephemeral=True)
 
     async def ask_amount(self, interaction: discord.Interaction, key: str, reset_menu: bool = False):
         if self.table.phase != "betting":
             return await self._closed(interaction)
         if reset_menu:
-            self.cog.request_refresh(self.table)   # al editar el panel el menú vuelve a quedar sin elegir
+            self.cog.request_refresh(self.table)   # al editar el panel el menÃº vuelve a quedar sin elegir
         await interaction.response.send_modal(BetModal(self.cog, self.table, key))
 
-    # ---- fila 0: menú con todas las apuestas ----
-    @discord.ui.select(placeholder="🎯 Elegí qué apostar (mirá los pagos y chances)…", options=_select_options(), row=0)
+    # ---- fila 0: menÃº con todas las apuestas ----
+    @discord.ui.select(placeholder="ðŸŽ¯ ElegÃ­ quÃ© apostar (mirÃ¡ los pagos y chances)â€¦", options=_select_options(), row=0)
     async def pick(self, interaction: discord.Interaction, select: discord.ui.Select):
         await self.ask_amount(interaction, select.values[0], reset_menu=True)
 
-    # ---- fila 1: apuestas rápidas ----
-    @discord.ui.button(label="Rojo", emoji="🔴", style=discord.ButtonStyle.danger, row=1)
+    # ---- fila 1: apuestas rÃ¡pidas ----
+    @discord.ui.button(label="Rojo", emoji="ðŸ”´", style=discord.ButtonStyle.danger, row=1)
     async def b_red(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.ask_amount(interaction, "red")
 
-    @discord.ui.button(label="Negro", emoji="⚫", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Negro", emoji="âš«", style=discord.ButtonStyle.secondary, row=1)
     async def b_black(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.ask_amount(interaction, "black")
 
@@ -178,12 +178,12 @@ class RouletteView(discord.ui.View):
     async def b_odd(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.ask_amount(interaction, "odd")
 
-    @discord.ui.button(label="Número", emoji="🎯", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="NÃºmero", emoji="ðŸŽ¯", style=discord.ButtonStyle.success, row=1)
     async def b_straight(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.ask_amount(interaction, "straight")
 
     # ---- fila 2: herramientas ----
-    @discord.ui.button(label="Repetir", emoji="🔁", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Repetir", emoji="ðŸ”", style=discord.ButtonStyle.secondary, row=2)
     async def b_repeat(self, interaction: discord.Interaction, button: discord.ui.Button):
         t = self.table
         if t.phase != "betting":
@@ -191,7 +191,7 @@ class RouletteView(discord.ui.View):
         last = self.cog.last_bets.get((t.channel_id, interaction.user.id))
         if not last:
             return await interaction.response.send_message(
-                embed=error("No tenés apuestas de la ronda anterior en este canal."), ephemeral=True
+                embed=error("No tenÃ©s apuestas de la ronda anterior en este canal."), ephemeral=True
             )
         await interaction.response.defer(ephemeral=True)
         placed, total, problem = 0, 0, None
@@ -203,42 +203,42 @@ class RouletteView(discord.ui.View):
             total += amount
         if not placed:
             return await interaction.followup.send(embed=error(problem), ephemeral=True)
-        text = f"Repetí **{placed}** apuesta(s) de la ronda pasada por **{fmt(total)}** {COIN}."
+        text = f"RepetÃ­ **{placed}** apuesta(s) de la ronda pasada por **{fmt(total)}** {COIN}."
         if problem:
-            text += f"\n⚠️ El resto no entró: {problem}"
+            text += f"\nâš ï¸ El resto no entrÃ³: {problem}"
         await interaction.followup.send(embed=ok(text), ephemeral=True)
 
-    @discord.ui.button(label="Mis apuestas", emoji="📋", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Mis apuestas", emoji="ðŸ“‹", style=discord.ButtonStyle.secondary, row=2)
     async def b_mine(self, interaction: discord.Interaction, button: discord.ui.Button):
         mine = self.table.bets.get(interaction.user.id)
         if not mine:
             return await interaction.response.send_message(
-                embed=error("Todavía no apostaste nada en esta ronda."), ephemeral=True
+                embed=error("TodavÃ­a no apostaste nada en esta ronda."), ephemeral=True
             )
         lines = []
         for key, amount in mine.items():
             info = rl.bet_info(key)
-            lines.append(f"{info.emoji} **{info.label}** · {fmt(amount)} {COIN} → si sale cobrás **{fmt(amount * info.mult)}**")
-        embed = discord.Embed(title="📋 Tus apuestas", description="\n".join(lines), color=GOLD)
-        embed.set_footer(text=f"Total apostado: {fmt(sum(mine.values()))} • Dilu's Bot")
+            lines.append(f"{info.emoji} **{info.label}** Â· {fmt(amount)} {COIN} â†’ si sale cobrÃ¡s **{fmt(amount * info.mult)}**")
+        embed = discord.Embed(title="ðŸ“‹ Tus apuestas", description="\n".join(lines), color=GOLD)
+        embed.set_footer(text=f"Total apostado: {fmt(sum(mine.values()))} â€¢ Dilu's Bot")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="Quitar", emoji="🗑️", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Quitar", emoji="ðŸ—‘ï¸", style=discord.ButtonStyle.secondary, row=2)
     async def b_clear(self, interaction: discord.Interaction, button: discord.ui.Button):
         refunded = await self.cog.clear_bets(self.table, interaction.user)
         if refunded is None:
             return await self._closed(interaction)
         if refunded == 0:
-            return await interaction.response.send_message(embed=error("No tenés apuestas para quitar."), ephemeral=True)
+            return await interaction.response.send_message(embed=error("No tenÃ©s apuestas para quitar."), ephemeral=True)
         await interaction.response.send_message(
-            embed=ok(f"Quité tus apuestas y te devolví **{fmt(refunded)}** {COIN}."), ephemeral=True
+            embed=ok(f"QuitÃ© tus apuestas y te devolvÃ­ **{fmt(refunded)}** {COIN}."), ephemeral=True
         )
 
-    @discord.ui.button(label="Ayuda", emoji="❓", style=discord.ButtonStyle.secondary, row=2)
+    @discord.ui.button(label="Ayuda", emoji="â“", style=discord.ButtonStyle.secondary, row=2)
     async def b_help(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(embed=self.cog.how_to_embed(), ephemeral=True)
 
-    @discord.ui.button(label="Girar ya", emoji="🎡", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Girar ya", emoji="ðŸŽ¡", style=discord.ButtonStyle.primary, row=2)
     async def b_spin(self, interaction: discord.Interaction, button: discord.ui.Button):
         t = self.table
         if t.phase != "betting":
@@ -246,24 +246,24 @@ class RouletteView(discord.ui.View):
         is_host = interaction.user.id == t.host_id
         if not is_host and not interaction.user.guild_permissions.manage_guild:
             return await interaction.response.send_message(
-                embed=error(f"Solo quien abrió la mesa (o un admin) puede girar antes. Se cierra sola <t:{int(t.end_time)}:R>."),
+                embed=error(f"Solo quien abriÃ³ la mesa (o un admin) puede girar antes. Se cierra sola <t:{int(t.end_time)}:R>."),
                 ephemeral=True,
             )
         if not t.bets:
-            return await interaction.response.send_message(embed=error("Todavía no apostó nadie."), ephemeral=True)
+            return await interaction.response.send_message(embed=error("TodavÃ­a no apostÃ³ nadie."), ephemeral=True)
         t.spin_event.set()
         await interaction.response.defer()
 
 
 class RoundOverView(discord.ui.View):
-    """Botón que aparece después del resultado."""
+    """BotÃ³n que aparece despuÃ©s del resultado."""
 
     def __init__(self, cog: "Roulette"):
         super().__init__(timeout=120)
         self.cog = cog
         self.message: discord.Message | None = None
 
-    @discord.ui.button(label="Nueva ronda", emoji="🎡", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Nueva ronda", emoji="ðŸŽ¡", style=discord.ButtonStyle.success)
     async def again(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.channel_id in self.cog.tables:
             return await interaction.response.send_message(embed=error("Ya hay una mesa abierta en este canal."), ephemeral=True)
@@ -286,7 +286,7 @@ class Roulette(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.tables: dict[int, Table] = {}                        # canal -> mesa abierta
-        self.history: dict[int, deque[int]] = {}                  # servidor -> últimos números
+        self.history: dict[int, deque[int]] = {}                  # servidor -> Ãºltimos nÃºmeros
         self.last_bets: dict[tuple[int, int], dict[str, int]] = {}  # (canal, persona) -> apuestas de la ronda anterior
         self._n = 0
 
@@ -300,7 +300,7 @@ class Roulette(commands.Cog):
 
     # ---- arranque / cierre ----
     async def cog_load(self):
-        """Si el bot se reinició en medio de una ronda, devuelve las monedas que quedaron apostadas."""
+        """Si el bot se reiniciÃ³ en medio de una ronda, devuelve las monedas que quedaron apostadas."""
         db = self.bot.db
         rows = await db.fetchall("SELECT guild_id, user_id, SUM(amount) AS total FROM roulette_bets GROUP BY guild_id, user_id")
         for r in rows:
@@ -311,7 +311,7 @@ class Roulette(commands.Cog):
             )
         if rows:
             await db.execute("DELETE FROM roulette_bets")
-            log.info("Ruleta: devolví las apuestas pendientes de %d persona(s) tras un reinicio.", len(rows))
+            log.info("Ruleta: devolvÃ­ las apuestas pendientes de %d persona(s) tras un reinicio.", len(rows))
 
     async def cog_unload(self):
         for table in list(self.tables.values()):
@@ -322,20 +322,20 @@ class Roulette(commands.Cog):
     # Apuestas
     # ------------------------------------------------------------------
     async def place_bet(self, table: Table, user: discord.abc.User, key: str, amount: int) -> str | None:
-        """Cobra y anota la apuesta. Devuelve un mensaje de error, o None si salió todo bien."""
+        """Cobra y anota la apuesta. Devuelve un mensaje de error, o None si saliÃ³ todo bien."""
         if self.eco is None:
-            return "La economía no está activa, así que no se puede apostar."
+            return "La economÃ­a no estÃ¡ activa, asÃ­ que no se puede apostar."
         async with table.lock:
             if table.phase != "betting":
-                return "La mesa ya cerró. ¡Esperá la próxima ronda!"
+                return "La mesa ya cerrÃ³. Â¡EsperÃ¡ la prÃ³xima ronda!"
             mine = table.bets.get(user.id, {})
             if key not in mine and len(mine) >= MAX_BETS_PER_PLAYER:
-                return f"Podés tener hasta **{MAX_BETS_PER_PLAYER}** apuestas distintas por ronda."
+                return f"PodÃ©s tener hasta **{MAX_BETS_PER_PLAYER}** apuestas distintas por ronda."
             current = mine.get(key, 0)
             if current + amount > MAX_BET:
-                return f"El máximo por apuesta es **{fmt(MAX_BET)}** {COIN} (en esa ya tenés {fmt(current)})."
+                return f"El mÃ¡ximo por apuesta es **{fmt(MAX_BET)}** {COIN} (en esa ya tenÃ©s {fmt(current)})."
             if not await self.eco.add(table.guild_id, user.id, -amount):
-                return "No tenés suficientes monedas."
+                return "No tenÃ©s suficientes monedas."
             try:
                 await self.bot.db.execute(
                     "INSERT INTO roulette_bets (message_id, guild_id, user_id, bet_key, amount) VALUES (?, ?, ?, ?, ?) "
@@ -351,7 +351,7 @@ class Roulette(commands.Cog):
         return None
 
     async def clear_bets(self, table: Table, user: discord.abc.User) -> int | None:
-        """Devuelve las monedas de todas las apuestas de la persona. None si la mesa ya cerró."""
+        """Devuelve las monedas de todas las apuestas de la persona. None si la mesa ya cerrÃ³."""
         async with table.lock:
             if table.phase != "betting":
                 return None
@@ -372,46 +372,46 @@ class Roulette(commands.Cog):
     @staticmethod
     def players_text(table: Table) -> str:
         if not table.bets:
-            return "Todavía nadie apostó. ¡Animate, la mesa está abierta! 🎲"
+            return "TodavÃ­a nadie apostÃ³. Â¡Animate, la mesa estÃ¡ abierta! ðŸŽ²"
         ranked = sorted(table.bets.items(), key=lambda kv: -sum(kv[1].values()))
-        lines = [f"<@{uid}> · **{fmt(sum(b.values()))}** {COIN}" for uid, b in ranked]
+        lines = [f"<@{uid}> Â· **{fmt(sum(b.values()))}** {COIN}" for uid, b in ranked]
         shown = lines[:10]
         if len(lines) > 10:
-            shown.append(f"…y {len(lines) - 10} más")
+            shown.append(f"â€¦y {len(lines) - 10} mÃ¡s")
         return "\n".join(shown)
 
     def panel_embed(self, table: Table, filename: str) -> discord.Embed:
         end = int(table.end_time)
         embed = discord.Embed(
-            title=f"🎡 Ruleta · mesa de {table.host_name}",
+            title=f"ðŸŽ¡ Ruleta Â· mesa de {table.host_name}",
             description=(
-                f"**¡Mesa abierta!** Cierra <t:{end}:R> y la bola gira sola.\n\n"
-                "**Cómo apostar**\n"
-                "1️⃣ Elegí qué apostar en el menú o con los botones\n"
-                f"2️⃣ Escribí cuántas monedas ponés ({MIN_BET} a {fmt(MAX_BET)})\n"
-                "3️⃣ Esperá el giro: si sale lo tuyo, cobrás al instante\n\n"
-                "*Tus fichas aparecen en el tablero, en la zona donde apostaste. ¿Dudas? Tocá* ❓ ***Ayuda***."
+                f"**Â¡Mesa abierta!** Cierra <t:{end}:R> y la bola gira sola.\n\n"
+                "**CÃ³mo apostar**\n"
+                "1ï¸âƒ£ ElegÃ­ quÃ© apostar en el menÃº o con los botones\n"
+                f"2ï¸âƒ£ EscribÃ­ cuÃ¡ntas monedas ponÃ©s ({MIN_BET} a {fmt(MAX_BET)})\n"
+                "3ï¸âƒ£ EsperÃ¡ el giro: si sale lo tuyo, cobrÃ¡s al instante\n\n"
+                "*Tus fichas aparecen en el tablero, en la zona donde apostaste. Â¿Dudas? TocÃ¡* â“ ***Ayuda***."
             ),
             color=GOLD,
         )
-        embed.add_field(name="💰 En juego", value=f"**{fmt(table.pot())}** {COIN}")
-        embed.add_field(name="⏱️ Cierra", value=f"<t:{end}:R>")
-        embed.add_field(name=f"👥 Jugadores ({len(table.bets)})", value=self.players_text(table), inline=False)
+        embed.add_field(name="ðŸ’° En juego", value=f"**{fmt(table.pot())}** {COIN}")
+        embed.add_field(name="â±ï¸ Cierra", value=f"<t:{end}:R>")
+        embed.add_field(name=f"ðŸ‘¥ Jugadores ({len(table.bets)})", value=self.players_text(table), inline=False)
         embed.set_image(url=f"attachment://{filename}")
-        embed.set_footer(text="Dilu's Bot • Ruleta europea (un solo cero) • La casa tiene 2,7% de ventaja")
+        embed.set_footer(text="Dilu's Bot â€¢ Ruleta europea (un solo cero) â€¢ La casa tiene 2,7% de ventaja")
         return embed
 
     def spin_embed(self, table: Table, filename: str) -> discord.Embed:
         embed = discord.Embed(
-            title="🎡 ¡No va más!",
+            title="ðŸŽ¡ Â¡No va mÃ¡s!",
             description=(
-                "La bola está girando… 🤞\n\n"
-                f"**{len(table.bets)}** jugador(es) · **{fmt(table.pot())}** {COIN} en juego"
+                "La bola estÃ¡ girandoâ€¦ ðŸ¤ž\n\n"
+                f"**{len(table.bets)}** jugador(es) Â· **{fmt(table.pot())}** {COIN} en juego"
             ),
             color=GOLD,
         )
         embed.set_image(url=f"attachment://{filename}")
-        embed.set_footer(text="Dilu's Bot • Ruleta europea")
+        embed.set_footer(text="Dilu's Bot â€¢ Ruleta europea")
         return embed
 
     def result_embed(self, table: Table, number: int, rows: list[tuple[int, int, int]], filename: str) -> discord.Embed:
@@ -420,88 +420,88 @@ class Roulette(commands.Cog):
         for uid, staked, returned in sorted(rows, key=lambda r: r[2] - r[1], reverse=True):
             net = returned - staked
             if net > 0:
-                lines.append(f"🟢 <@{uid}> ganó **+{fmt(net)}** {COIN}  *(apostó {fmt(staked)}, cobró {fmt(returned)})*")
+                lines.append(f"ðŸŸ¢ <@{uid}> ganÃ³ **+{fmt(net)}** {COIN}  *(apostÃ³ {fmt(staked)}, cobrÃ³ {fmt(returned)})*")
             elif net == 0 and returned:
-                lines.append(f"⚪ <@{uid}> recuperó lo apostado ({fmt(staked)} {COIN})")
+                lines.append(f"âšª <@{uid}> recuperÃ³ lo apostado ({fmt(staked)} {COIN})")
             elif returned:
-                lines.append(f"🔴 <@{uid}> perdió **{fmt(-net)}** {COIN}  *(cobró {fmt(returned)} de {fmt(staked)})*")
+                lines.append(f"ðŸ”´ <@{uid}> perdiÃ³ **{fmt(-net)}** {COIN}  *(cobrÃ³ {fmt(returned)} de {fmt(staked)})*")
             else:
-                lines.append(f"🔴 <@{uid}> perdió **{fmt(staked)}** {COIN}")
+                lines.append(f"ðŸ”´ <@{uid}> perdiÃ³ **{fmt(staked)}** {COIN}")
         shown = lines[:15]
         if len(lines) > 15:
-            shown.append(f"…y {len(lines) - 15} más")
+            shown.append(f"â€¦y {len(lines) - 15} mÃ¡s")
 
         embed = discord.Embed(
-            title=f"🎡 ¡Salió el {number}! {rl.COLOR_EMOJI[kind]}",
-            description=f"**{' · '.join(rl.number_tags(number))}**\n\n" + "\n".join(shown),
+            title=f"ðŸŽ¡ Â¡SaliÃ³ el {number}! {rl.COLOR_EMOJI[kind]}",
+            description=f"**{' Â· '.join(rl.number_tags(number))}**\n\n" + "\n".join(shown),
             color={"red": 0xEF4444, "black": 0x4B5563, "green": 0x22C55E}[kind],
         )
-        embed.add_field(name="💰 Apostado", value=f"{fmt(sum(r[1] for r in rows))} {COIN}")
-        embed.add_field(name="🏆 Pagado", value=f"{fmt(sum(r[2] for r in rows))} {COIN}")
+        embed.add_field(name="ðŸ’° Apostado", value=f"{fmt(sum(r[1] for r in rows))} {COIN}")
+        embed.add_field(name="ðŸ† Pagado", value=f"{fmt(sum(r[2] for r in rows))} {COIN}")
         embed.set_image(url=f"attachment://{filename}")
-        embed.set_footer(text="Dilu's Bot • ¿Otra vuelta? Tocá «Nueva ronda»")
+        embed.set_footer(text="Dilu's Bot â€¢ Â¿Otra vuelta? TocÃ¡ Â«Nueva rondaÂ»")
         return embed
 
     @staticmethod
     def how_to_embed() -> discord.Embed:
         embed = discord.Embed(
-            title="🎡 Cómo se juega a la ruleta",
+            title="ðŸŽ¡ CÃ³mo se juega a la ruleta",
             description=(
-                "La rueda tiene **37 casilleros**: del **0** al **36**. Mientras la mesa está abierta, cada persona apuesta a lo que quiera. "
-                "Después la bola gira, cae en un número y las apuestas ganadoras **cobran al instante**."
+                "La rueda tiene **37 casilleros**: del **0** al **36**. Mientras la mesa estÃ¡ abierta, cada persona apuesta a lo que quiera. "
+                "DespuÃ©s la bola gira, cae en un nÃºmero y las apuestas ganadoras **cobran al instante**."
             ),
             color=GOLD,
         )
         embed.add_field(
-            name="🔴 Apuestas simples · pagan 1 a 1",
+            name="ðŸ”´ Apuestas simples Â· pagan 1 a 1",
             value=(
                 "Rojo, Negro, Par, Impar, 1-18 y 19-36.\n"
-                f"Cubren 18 números: chances de **{rl.pct(18)}**.\n"
-                "Ej: ponés 100 y ganás → cobrás **200** (ganancia de 100)."
+                f"Cubren 18 nÃºmeros: chances de **{rl.pct(18)}**.\n"
+                "Ej: ponÃ©s 100 y ganÃ¡s â†’ cobrÃ¡s **200** (ganancia de 100)."
             ),
             inline=False,
         )
         embed.add_field(
-            name="🥇 Docenas y columnas · pagan 2 a 1",
+            name="ðŸ¥‡ Docenas y columnas Â· pagan 2 a 1",
             value=(
-                "Docenas: 1-12, 13-24 y 25-36. Columnas: las tres filas del tablero (las marcadas «2:1»).\n"
-                f"Cubren 12 números: chances de **{rl.pct(12)}**.\n"
-                "Ej: ponés 100 y ganás → cobrás **300** (ganancia de 200)."
+                "Docenas: 1-12, 13-24 y 25-36. Columnas: las tres filas del tablero (las marcadas Â«2:1Â»).\n"
+                f"Cubren 12 nÃºmeros: chances de **{rl.pct(12)}**.\n"
+                "Ej: ponÃ©s 100 y ganÃ¡s â†’ cobrÃ¡s **300** (ganancia de 200)."
             ),
             inline=False,
         )
         embed.add_field(
-            name="🎯 Número pleno · paga 35 a 1",
+            name="ðŸŽ¯ NÃºmero pleno Â· paga 35 a 1",
             value=(
-                f"Apostás a un solo número: chances de **{rl.pct(1)}**.\n"
-                "Ej: ponés 100 al 17 y sale → cobrás **3.600** (ganancia de 3.500)."
+                f"ApostÃ¡s a un solo nÃºmero: chances de **{rl.pct(1)}**.\n"
+                "Ej: ponÃ©s 100 al 17 y sale â†’ cobrÃ¡s **3.600** (ganancia de 3.500)."
             ),
             inline=False,
         )
         embed.add_field(
-            name="🟢 ¿Y el cero?",
-            value="Es verde: no cuenta como rojo, negro, par, impar, bajo ni alto. Si sale, **pierden todas las apuestas** salvo la de quien apostó al 0.",
+            name="ðŸŸ¢ Â¿Y el cero?",
+            value="Es verde: no cuenta como rojo, negro, par, impar, bajo ni alto. Si sale, **pierden todas las apuestas** salvo la de quien apostÃ³ al 0.",
             inline=False,
         )
         embed.add_field(
-            name="🎛️ Los botones",
+            name="ðŸŽ›ï¸ Los botones",
             value=(
-                "🔁 **Repetir**: vuelve a poner tus apuestas de la ronda anterior\n"
-                "📋 **Mis apuestas**: ves lo que jugaste y cuánto cobrarías\n"
-                "🗑️ **Quitar**: cancelás tus apuestas y te devuelvo las monedas\n"
-                "🎡 **Girar ya**: solo quien abrió la mesa (o un admin)"
+                "ðŸ” **Repetir**: vuelve a poner tus apuestas de la ronda anterior\n"
+                "ðŸ“‹ **Mis apuestas**: ves lo que jugaste y cuÃ¡nto cobrarÃ­as\n"
+                "ðŸ—‘ï¸ **Quitar**: cancelÃ¡s tus apuestas y te devuelvo las monedas\n"
+                "ðŸŽ¡ **Girar ya**: solo quien abriÃ³ la mesa (o un admin)"
             ),
             inline=False,
         )
         embed.add_field(
-            name="🧠 Para tener en cuenta",
+            name="ðŸ§  Para tener en cuenta",
             value=(
-                f"Podés combinar hasta **{MAX_BETS_PER_PLAYER}** apuestas distintas. Por el cero, la casa tiene **2,7%** de ventaja: "
-                "a la larga la banca gana, así que ¡jugá por diversión!"
+                f"PodÃ©s combinar hasta **{MAX_BETS_PER_PLAYER}** apuestas distintas. Por el cero, la casa tiene **2,7%** de ventaja: "
+                "a la larga la banca gana, asÃ­ que Â¡jugÃ¡ por diversiÃ³n!"
             ),
             inline=False,
         )
-        embed.set_footer(text="Dilu's Bot • Ruleta europea")
+        embed.set_footer(text="Dilu's Bot â€¢ Ruleta europea")
         return embed
 
     # ------------------------------------------------------------------
@@ -514,7 +514,7 @@ class Roulette(commands.Cog):
         return self.panel_embed(table, name), discord.File(buf, filename=name)
 
     def request_refresh(self, table: Table):
-        """Pide actualizar el panel; junta varios cambios seguidos en una sola edición."""
+        """Pide actualizar el panel; junta varios cambios seguidos en una sola ediciÃ³n."""
         table.dirty = True
         if table.refresh_task is None or table.refresh_task.done():
             table.refresh_task = asyncio.create_task(self._refresh_loop(table))
@@ -541,7 +541,7 @@ class Roulette(commands.Cog):
             await table.message.edit(**kwargs)
             return True
         except discord.HTTPException:
-            log.warning("No pude editar el mensaje de la ruleta (¿lo borraron?).")
+            log.warning("No pude editar el mensaje de la ruleta (Â¿lo borraron?).")
             return False
 
     # ------------------------------------------------------------------
@@ -550,12 +550,12 @@ class Roulette(commands.Cog):
     async def open_table(self, interaction: discord.Interaction, bet_time: int):
         if self.eco is None:
             return await interaction.response.send_message(
-                embed=error("La economía no está activa, así que no se puede apostar."), ephemeral=True
+                embed=error("La economÃ­a no estÃ¡ activa, asÃ­ que no se puede apostar."), ephemeral=True
             )
         channel_id = interaction.channel_id
         if channel_id in self.tables:
             return await interaction.response.send_message(
-                embed=error("Ya hay una mesa abierta en este canal. ¡Sumate a esa!"), ephemeral=True
+                embed=error("Ya hay una mesa abierta en este canal. Â¡Sumate a esa!"), ephemeral=True
             )
 
         table = Table(interaction.guild_id, channel_id, interaction.user, bet_time)
@@ -584,10 +584,10 @@ class Roulette(commands.Cog):
         except Exception:
             log.exception("Error en la ruleta del canal %s", table.channel_id)
             if table.settled:
-                msg = "Los pagos ya se acreditaron, pero no pude mostrar el resultado. Mirá tu `/balance`."
+                msg = "Los pagos ya se acreditaron, pero no pude mostrar el resultado. MirÃ¡ tu `/balance`."
             else:
                 await self._refund_all(table)
-                msg = "Hubo un problema con la ruleta. Te devolví todas las apuestas."
+                msg = "Hubo un problema con la ruleta. Te devolvÃ­ todas las apuestas."
             await self._safe_edit(table, embed=error(msg), attachments=[], view=None)
         finally:
             table.phase = "done"
@@ -595,18 +595,18 @@ class Roulette(commands.Cog):
 
     async def _spin(self, table: Table):
         async with table.lock:
-            table.phase = "spinning"           # desde acá no entran más apuestas
+            table.phase = "spinning"           # desde acÃ¡ no entran mÃ¡s apuestas
         if table.view:
             table.view.stop()
 
         if not table.bets:
-            embed = discord.Embed(title="🎡 Mesa cerrada", description="Nadie apostó, así que no hubo giro. ¡Abrí otra con `/ruleta`!", color=0x6B7280)
+            embed = discord.Embed(title="ðŸŽ¡ Mesa cerrada", description="Nadie apostÃ³, asÃ­ que no hubo giro. Â¡AbrÃ­ otra con `/ruleta`!", color=0x6B7280)
             await self._safe_edit(table, embed=embed, attachments=[], view=None)
             return
 
         number = rl.spin()
 
-        # 1) animación de la rueda
+        # 1) animaciÃ³n de la rueda
         try:
             gif = await asyncio.to_thread(rl.render_spin_gif, number)
             if gif.getbuffer().nbytes > 7_500_000:
@@ -617,7 +617,7 @@ class Roulette(commands.Cog):
         except Exception:
             log.exception("No pude animar la ruleta; se resuelve igual.")
 
-        # 2) se dibuja el resultado ANTES de pagar: si algo falla acá, se devuelven las apuestas sin tocar saldos
+        # 2) se dibuja el resultado ANTES de pagar: si algo falla acÃ¡, se devuelven las apuestas sin tocar saldos
         hist = [*self.history.get(table.guild_id, []), number]
         board = (await asyncio.to_thread(rl.render_board, table.chips(), hist, number)).getvalue()
 
@@ -639,7 +639,7 @@ class Roulette(commands.Cog):
                     log.warning("No pude avisar el resultado de la ruleta.")
 
     async def settle(self, table: Table, number: int) -> list[tuple[int, int, int]]:
-        """Paga a quien ganó. Devuelve [(persona, apostado, cobrado)]."""
+        """Paga a quien ganÃ³. Devuelve [(persona, apostado, cobrado)]."""
         rows = []
         for uid, bets in table.bets.items():
             staked = sum(bets.values())
@@ -654,7 +654,7 @@ class Roulette(commands.Cog):
         return rows
 
     async def _refund_all(self, table: Table):
-        """Si algo sale mal, todas las apuestas vuelven a sus dueños."""
+        """Si algo sale mal, todas las apuestas vuelven a sus dueÃ±os."""
         if table.settled or table.message is None:
             return
         table.settled = True
@@ -671,7 +671,7 @@ class Roulette(commands.Cog):
     # ------------------------------------------------------------------
     # Comando
     # ------------------------------------------------------------------
-    @app_commands.command(name="ruleta", description="🎡 Abrí una mesa de ruleta: todo el chat puede apostar con sus monedas")
+    @app_commands.command(name="ruleta", description="ðŸŽ¡ AbrÃ­ una mesa de ruleta: todo el chat puede apostar con sus monedas")
     @app_commands.describe(tiempo=f"Segundos que la mesa queda abierta para apostar (por defecto {BET_TIME})")
     @app_commands.guild_only()
     async def ruleta(self, interaction: discord.Interaction, tiempo: app_commands.Range[int, 20, 120] = BET_TIME):
