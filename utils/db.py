@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS temp_voice (
     owner_id INTEGER NOT NULL
 );
 
--- Apuestas de la ruleta que todavÃ­a no se resolvieron (si el bot se reinicia, se devuelven)
+-- Apuestas de la ruleta que todavía no se resolvieron (si el bot se reinicia, se devuelven)
 CREATE TABLE IF NOT EXISTS roulette_bets (
     message_id INTEGER NOT NULL,
     guild_id INTEGER NOT NULL,
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS web_blackjack (
     PRIMARY KEY (guild_id, user_id)
 );
 
--- Panel web: estadÃ­sticas de casino por persona
+-- Panel web: estadísticas de casino por persona
 CREATE TABLE IF NOT EXISTS casino_stats (
     guild_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
@@ -111,15 +111,28 @@ CREATE TABLE IF NOT EXISTS casino_stats (
     best INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id, game)
 );
+
+-- Panel web: últimas jugadas (para el historial y el gráfico de ganancias)
+CREATE TABLE IF NOT EXISTS casino_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    game TEXT NOT NULL,
+    bet INTEGER NOT NULL,
+    returned INTEGER NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_casino_log_user ON casino_log (guild_id, user_id, id);
 """
 
-# Columnas agregadas despuÃ©s de la primera versiÃ³n (se aÃ±aden solas a bases ya existentes)
+# Columnas agregadas después de la primera versión (se añaden solas a bases ya existentes)
 MIGRATIONS = {
     "log_channel": "INTEGER",
     "tempvoice_channel": "INTEGER",
 }
 
-# Columnas permitidas en guild_settings (evita inyecciÃ³n SQL en set_setting)
+# Columnas permitidas en guild_settings (evita inyección SQL en set_setting)
 SETTINGS = {
     "welcome_channel",
     "goodbye_channel",
@@ -147,7 +160,7 @@ class Database:
         await self.conn.commit()
 
     async def _migrate(self):
-        """Agrega columnas nuevas a tablas que ya existÃ­an (sin perder datos)."""
+        """Agrega columnas nuevas a tablas que ya existían (sin perder datos)."""
         async with self.conn.execute("PRAGMA table_info(guild_settings)") as cur:
             existing = {row["name"] for row in await cur.fetchall()}
         for column, col_type in MIGRATIONS.items():
