@@ -8,7 +8,9 @@ from collections import defaultdict, deque
 import discord
 
 from cogs import blackjack as bj
-from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, JOBS, WORK_COOLDOWN, WORK_RANGE
+from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, JOBS, SLOT_MULT, SLOT_PAIR_MULT, SLOT_SYMBOLS, WORK_COOLDOWN, WORK_RANGE
+from cogs.economy import MAX_BET as SL_MAX_BET
+from cogs.economy import MIN_BET as SL_MIN_BET
 from cogs.levels import level_from_xp
 from cogs.roulette import MAX_BET as RL_MAX_BET
 from cogs.roulette import MIN_BET as RL_MIN_BET
@@ -20,6 +22,7 @@ log = logging.getLogger("dilus-bot.web")
 BJ_IDLE = 180                  # segundos sin actuar: la mano se planta sola
 RL_MAX_ZONES = 30              # zonas distintas por tirada
 RL_MAX_TOTAL = RL_MAX_BET * 10  # tope total por tirada
+PAY_MAX = 1_000_000            # igual que /pay
 
 
 class Services:
@@ -80,8 +83,17 @@ class Services:
     def guild_card(self, guild) -> dict:
         return {"id": str(guild.id), "name": guild.name, "icon": str(guild.icon.with_size(64)) if guild.icon else None}
 
-    async def record(self, gid: int, uid: int, game: str, wagered: int, returned: int):
+    async def record(self, gid: int, uid: int, game: str, wagered: int, returned: int, detail: str = ""):
         best = max(0, returned - wagered)
+        await self.db.execute(
+            "INSERT INTO casino_log (guild_id, user_id, game, bet, returned, detail, ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (gid, uid, game, wagered, returned, detail[:40], time.time()),
+        )
+        await self.db.execute(     # solo se guardan las últimas 200 jugadas por persona
+            "DELETE FROM casino_log WHERE guild_id = ? AND user_id = ? AND id NOT IN "
+            "(SELECT id FROM casino_log WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT 200)",
+            (gid, uid, gid, uid),
+        )
         await self.db.execute(
             "INSERT INTO casino_stats (guild_id, user_id, game, played, wagered, returned, best) VALUES (?, ?, ?, 1, ?, ?, ?) "
             "ON CONFLICT(guild_id, user_id, game) DO UPDATE SET played = played + 1, wagered = wagered + excluded.wagered, "
@@ -129,7 +141,8 @@ class Services:
             },
             "work": {"ready_at": row["last_work"] + WORK_COOLDOWN if row["last_work"] else 0, "min": WORK_RANGE[0], "max": WORK_RANGE[1], "cooldown": WORK_COOLDOWN},
             "casino": casino,
-            "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET},
+            "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET, "sl_min": SL_MIN_BET, "sl_max": SL_MAX_BET, "pay_max": PAY_MAX},
+            "slots": {"symbols": SLOT_SYMBOLS, "mult": SLOT_MULT, "pair": SLOT_PAIR_MULT},
         }
 
     # ------------------------------------------------------------------
@@ -286,7 +299,7 @@ class Services:
         if g.payout:
             await self.eco.add(g.guild_id, g.user_id, g.payout)
         await self.db.execute("DELETE FROM web_blackjack WHERE guild_id = ? AND user_id = ?", (g.guild_id, g.user_id))
-        await self.record(g.guild_id, g.user_id, "blackjack", g.bet, g.payout)
+        await self.record(g.guild_id, g.user_id, "blackjack", g.bet, g.payout, g.outcome or "")
         return g
 
     async def _bj_finish(self, key: tuple[int, int]) -> bj.Game:
@@ -418,7 +431,7 @@ class Services:
                 results.append({"key": key, "label": info.label, "amount": amount, "payout": back, "won": back > 0})
             if returned:
                 await self.eco.add(gid, uid, returned)
-            await self.record(gid, uid, "roulette", total, returned)
+            await self.record(gid, uid, "roulette", total, returned, str(number))
             hist = self._rl_history(gid)
             hist.append(number)
             return {
@@ -426,3 +439,117 @@ class Services:
                 "results": results, "total_bet": total, "total_return": returned, "net": returned - total,
                 "balance": await self.eco.balance(gid, uid), "history": list(hist)[-14:],
             }
+
+    # ------------------------------------------------------------------
+    # Tragamonedas (mismas reglas y pagos que /slots)
+    # ------------------------------------------------------------------
+    async def slots_spin(self, gid: int, uid: int, bet) -> dict:
+        if not isinstance(bet, int) or isinstance(bet, bool) or not SL_MIN_BET <= bet <= SL_MAX_BET:
+            raise ApiError(f"La apuesta tiene que estar entre {SL_MIN_BET} y {SL_MAX_BET}.")
+        async with self._locks[(gid, uid)]:
+            if not await self.eco.add(gid, uid, -bet):
+                raise ApiError("No tenés suficientes monedas para esa apuesta.", 402)
+            rng = random.SystemRandom()
+            reels = [rng.choice(SLOT_SYMBOLS) for _ in range(3)]
+            if len(set(reels)) == 1:
+                payout, kind, mult = bet * SLOT_MULT[reels[0]], "jackpot", SLOT_MULT[reels[0]]
+            elif len(set(reels)) == 2:
+                payout, kind, mult = int(bet * SLOT_PAIR_MULT), "pair", SLOT_PAIR_MULT
+            else:
+                payout, kind, mult = 0, "none", 0
+            if payout:
+                await self.eco.add(gid, uid, payout)
+            await self.record(gid, uid, "slots", bet, payout, " ".join(reels))
+            return {"reels": reels, "kind": kind, "mult": mult, "payout": payout, "net": payout - bet, "balance": await self.eco.balance(gid, uid)}
+
+    # ------------------------------------------------------------------
+    # Enviar monedas (mismas reglas que /pay)
+    # ------------------------------------------------------------------
+    async def members(self, gid: int, uid: int, query) -> dict:
+        q = str(query or "").strip().lower()[:32]
+        if not q:
+            return {"members": []}
+        guild = self.guild(gid)
+        found = []
+        for m in guild.members:
+            if m.bot or m.id == uid:
+                continue
+            name = m.display_name.lower()
+            if q in name or q in m.name.lower():
+                found.append((0 if name.startswith(q) else 1, name, m))
+        found.sort(key=lambda t: (t[0], t[1]))
+        return {"members": [{"id": str(m.id), "name": m.display_name, "avatar": str(m.display_avatar.with_size(64))} for _, _, m in found[:8]]}
+
+    async def pay(self, gid: int, uid: int, target, amount) -> dict:
+        if not isinstance(amount, int) or isinstance(amount, bool) or not 1 <= amount <= PAY_MAX:
+            raise ApiError(f"El monto tiene que estar entre 1 y {PAY_MAX}.")
+        if not isinstance(target, str) or not target.isdigit() or int(target) == uid:
+            raise ApiError("Elegí a otra persona (no bots ni vos mismo).")
+        member = self.guild(gid).get_member(int(target))
+        if member is None or member.bot:
+            raise ApiError("No encuentro a esa persona en el servidor.", 404)
+        async with self._locks[(gid, uid)]:
+            if not await self.eco.add(gid, uid, -amount):
+                raise ApiError("No tenés suficientes monedas.", 402)
+            await self.eco.add(gid, member.id, amount)
+        return {"to": member.display_name, "amount": amount, "balance": await self.eco.balance(gid, uid)}
+
+    # ------------------------------------------------------------------
+    # Historial y logros
+    # ------------------------------------------------------------------
+    async def activity(self, gid: int, uid: int) -> dict:
+        rows = await self.db.fetchall(
+            "SELECT game, bet, returned, detail, ts FROM casino_log WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT 40", (gid, uid)
+        )
+        ordered = list(reversed(rows))
+        total, series = 0, []
+        for r in ordered:
+            total += r["returned"] - r["bet"]
+            series.append(total)
+        items = [
+            {"game": r["game"], "bet": r["bet"], "returned": r["returned"], "net": r["returned"] - r["bet"], "detail": r["detail"], "ts": r["ts"]}
+            for r in rows[:12]
+        ]
+        return {"items": items, "series": series, "total_net": total, "count": len(rows)}
+
+    async def achievements(self, gid: int, uid: int) -> dict:
+        p = await self.profile(gid, uid)
+        guild = self.guild(gid)
+        member = await self.member(guild, uid)
+        owned = 0
+        for r in await self.db.fetchall("SELECT role_id FROM shop WHERE guild_id = ?", (gid,)):
+            role = guild.get_role(r["role_id"])
+            if member and role and role in member.roles:
+                owned += 1
+        cs, lv = p["casino"], p["level"]
+        played = lambda game: cs.get(game, {}).get("played", 0)
+        best = max([c["best"] for c in cs.values()] or [0])
+        hours = lv["voice_seconds"] / 3600
+        defs = [
+            ("eco1", "🪙", "Ahorrista", "Juntá 10.000 monedas", p["balance"], 10_000, "bronze"),
+            ("eco2", "💰", "Adinerado", "Juntá 50.000 monedas", p["balance"], 50_000, "silver"),
+            ("eco3", "🏦", "Magnate", "Juntá 250.000 monedas", p["balance"], 250_000, "gold"),
+            ("lvl1", "⭐", "Novato", "Llegá al nivel 5", lv["level"], 5, "bronze"),
+            ("lvl2", "🌟", "Veterano", "Llegá al nivel 10", lv["level"], 10, "silver"),
+            ("lvl3", "👑", "Leyenda", "Llegá al nivel 25", lv["level"], 25, "gold"),
+            ("str1", "🔥", "Constante", "Racha diaria de 3 días", p["daily"]["streak"], 3, "bronze"),
+            ("str2", "🔥", "Disciplinado", "Racha diaria de 7 días", p["daily"]["streak"], 7, "silver"),
+            ("str3", "☄️", "Imparable", "Racha diaria de 14 días", p["daily"]["streak"], 14, "gold"),
+            ("chat1", "💬", "Charlatán", "Enviá 100 mensajes", lv["messages"], 100, "bronze"),
+            ("chat2", "📣", "Alma del chat", "Enviá 1.000 mensajes", lv["messages"], 1000, "silver"),
+            ("voz1", "🎧", "Oyente", "Pasá 10 horas en voz", hours, 10, "bronze"),
+            ("voz2", "🎙️", "Locutor", "Pasá 50 horas en voz", hours, 50, "silver"),
+            ("rl1", "🎡", "Apostador", "Jugá 10 veces a la ruleta", played("roulette"), 10, "bronze"),
+            ("rl2", "🎡", "Habitué", "Jugá 100 veces a la ruleta", played("roulette"), 100, "silver"),
+            ("bj1", "🃏", "Cartero", "Jugá 10 manos de blackjack", played("blackjack"), 10, "bronze"),
+            ("bj2", "♠️", "Tahúr", "Jugá 100 manos de blackjack", played("blackjack"), 100, "silver"),
+            ("sl1", "🎰", "Tragamonedas", "Jugá 25 veces a los slots", played("slots"), 25, "bronze"),
+            ("win1", "🍀", "Golpe de suerte", "Ganá 1.000 monedas de una sola vez", best, 1000, "silver"),
+            ("win2", "💎", "Jackpot", "Ganá 10.000 monedas de una sola vez", best, 10_000, "gold"),
+            ("shop1", "🛍️", "Coleccionista", "Comprá un rol de la tienda", owned, 1, "bronze"),
+        ]
+        items = [
+            {"id": i, "icon": ic, "name": n, "desc": d, "value": round(v, 1), "goal": g, "tier": t, "unlocked": v >= g}
+            for i, ic, n, d, v, g, t in defs
+        ]
+        return {"items": items, "unlocked": sum(1 for x in items if x["unlocked"]), "total": len(items)}
