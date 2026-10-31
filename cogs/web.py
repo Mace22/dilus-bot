@@ -76,7 +76,8 @@ class Web(commands.Cog):
             "Entrá con tu cuenta de Discord y desde ahí podés:\n"
             "• 🪙 Ver tu saldo y reclamar **/daily** y **/trabajar**\n"
             "• 📊 Mirar tu nivel, XP, horas en voz y puestos\n"
-            "• 🎡 Jugar a la **ruleta** y 🃏 al **blackjack**\n"
+            "• 🎡 Jugar a la **ruleta**, 🃏 al **blackjack** y 🎰 a los **slots**, con sonido\n"
+            "• 🏅 Ver tus **logros** y 💸 **enviar monedas**\n"
             "• 🛒 Comprar roles de la tienda y ver los rankings",
         )
         view = discord.ui.View()
