@@ -47,6 +47,15 @@ const ICONS = {
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
 };
+Object.assign(ICONS, {
+  slots: '<rect x="2" y="5" width="20" height="14" rx="3"/><line x1="8.5" y1="5" x2="8.5" y2="19"/><line x1="15.5" y1="5" x2="15.5" y2="19"/><circle cx="5.2" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18.8" cy="12" r="1"/>',
+  volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
+  volumeOff: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
+  send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+});
 function icon(name, cls = "ic") {
   const s = document.createElementNS(SVGNS, "svg");
   s.setAttribute("viewBox", "0 0 24 24");
@@ -61,6 +70,21 @@ function coinIcon() {
   s.innerHTML = '<circle cx="12" cy="12" r="11" fill="#e8c35a"/><circle cx="12" cy="12" r="8.2" fill="none" stroke="#b8902b" stroke-width="1.6"/><text x="12" y="16.4" text-anchor="middle" font-size="11.5" font-weight="800" fill="#8a6414" font-family="Outfit, sans-serif">$</text>';
   return s;
 }
+
+function countUp(el, to, dur = 900) {
+  const t0 = performance.now();
+  const tick = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(to * e);
+    if (k < 1) requestAnimationFrame(tick); else el.textContent = fmt(to);
+  };
+  requestAnimationFrame(tick);
+}
+const stagger = view => view.querySelectorAll(".card, .sec-title, .page-title").forEach((el, i) => { el.classList.add("rise"); el.style.setProperty("--i", Math.min(i, 12)); });
+document.addEventListener("click", e => {       // sonidito de clic en cualquier botón (salvo los que tienen su propio sonido)
+  const t = e.target.closest("button, a.btn, .nav a");
+  if (t && !t.disabled && !t.closest("[data-silent]")) Sfx.click();
+}, true);
 
 /* ---------- estado ---------- */
 const S = { user: null, guilds: [], gid: null, profile: null, offset: 0, routeToken: 0, cleanups: [] };
@@ -101,6 +125,7 @@ const gpost = (path, body = {}) => api(path, { method: "POST", body: { guild: S.
 
 /* ---------- avisos y ventanas ---------- */
 function toast(text, kind = "") {
+  if (kind === "err") Sfx.error();
   const t = h("div", { class: `toast ${kind}` }, text);
   $("#toasts").append(t);
   setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 320); }, 3800);
@@ -181,8 +206,10 @@ const NAV = [
   { id: "inicio", label: "Inicio", icon: "home" },
   { id: "ruleta", label: "Ruleta", icon: "wheel" },
   { id: "blackjack", label: "Blackjack", icon: "cards" },
+  { id: "slots", label: "Slots", icon: "slots" },
   { id: "tienda", label: "Tienda", icon: "bag" },
   { id: "ranking", label: "Ranking", icon: "trophy" },
+  { id: "logros", label: "Logros", icon: "star" },
 ];
 
 function guildIcon(g) {
@@ -210,9 +237,23 @@ function renderShell() {
     h("img", { class: "avatar", src: S.user.avatar, alt: "" }));
   document.addEventListener("click", () => { gMenu.classList.add("hide"); uMenu.classList.add("hide"); });
 
+  /* sonido */
+  const paintSound = () => sBtn.replaceChildren(icon(Sfx.muted ? "volumeOff" : "volume"));
+  const sBtn = h("button", { class: "icon-btn", "aria-label": "Sonido", title: "Sonido",
+    onclick: e => { e.stopPropagation(); gMenu.classList.add("hide"); uMenu.classList.add("hide"); sMenu.classList.toggle("hide"); } });
+  const slider = h("input", { type: "range", min: "0", max: "100", value: String(Math.round(Sfx.volume * 100)), class: "slider", "aria-label": "Volumen",
+    oninput: e => Sfx.setVolume(e.target.value / 100), onchange: () => Sfx.chip() });
+  const muteSw = h("button", { class: `switch ${Sfx.muted ? "" : "on"}`, role: "switch", "aria-label": "Activar sonido",
+    onclick: () => { Sfx.setMuted(!Sfx.muted); muteSw.classList.toggle("on", !Sfx.muted); paintSound(); if (!Sfx.muted) Sfx.notify(); } }, h("i"));
+  const sMenu = h("div", { class: "menu right sound-menu hide", onclick: e => e.stopPropagation() },
+    h("div", { class: "sound-row" }, h("b", { text: "Sonido" }), muteSw), h("div", { class: "sound-row" }, icon("volume"), slider));
+  paintSound();
+  document.addEventListener("click", () => sMenu.classList.add("hide"));
+
   const top = h("header", { class: "top" },
     h("div", { class: "menu-wrap" }, gBtn, gMenu), h("div", { class: "grow" }),
     h("div", { class: "bal-chip", title: "Tu saldo" }, coinIcon(), balSpan()),
+    h("div", { class: "menu-wrap" }, sBtn, sMenu),
     h("div", { class: "menu-wrap" }, uBtn, uMenu));
 
   mount(h("div", { class: "shell" }, side, h("div", { class: "main" }, top, h("main", { id: "view" }))));
@@ -247,7 +288,7 @@ function route() {
   if (!view) return;
   view.replaceChildren(h("div", { class: "grid g3" }, [1, 2, 3].map(() => h("div", { class: "skeleton", style: { height: "150px" } }))));
   view.style.animation = "none"; void view.offsetWidth; view.style.animation = "";
-  VIEWS[name](view, token).catch(e => {
+  VIEWS[name](view, token).then(() => { if (alive(token)) stagger(view); }).catch(e => {
     if (token !== S.routeToken) return;
     view.replaceChildren(h("div", { class: "card empty" }, h("div", { class: "big", text: "😵" }), h("p", { text: e.message || "No pude cargar esta sección." }),
       h("button", { class: "btn btn-primary", text: "Reintentar", onclick: route })));
@@ -303,7 +344,8 @@ VIEWS.inicio = async (root, token) => {
           h("span", { class: "pill violet", text: `Nivel ${lv.level}` }),
           h("span", { class: "pill gold", text: `#${p.eco_rank} en economía` }),
           lv.rank ? h("span", { class: "pill", text: `#${lv.rank} en niveles` }) : null))),
-    h("div", { class: "hero-bal" }, h("small", { text: "Tu saldo" }), h("div", { class: "big-num" }, coinIcon(), balSpan())));
+    h("div", { class: "hero-bal" }, h("small", { text: "Tu saldo" }), h("div", { class: "big-num" }, coinIcon(), balSpan()),
+      h("button", { class: "btn btn-ghost btn-sm send-btn", onclick: () => openPay() }, icon("send"), "Enviar monedas")));
 
   /* reclamos */
   const dots = h("div", { class: "streak" });
@@ -319,7 +361,7 @@ VIEWS.inicio = async (root, token) => {
     claim: async card => {
       const r = await gpost("/api/claim/daily");
       d.ready_at = r.ready_at; d.streak = r.streak; d.next_reward = d.base + Math.min(r.streak, d.cap) * d.bonus;
-      setBalance(r.balance); burst(card, `+${fmt(r.reward)}`); paintStreak();
+      setBalance(r.balance); burst(card, `+${fmt(r.reward)}`); paintStreak(); Sfx.coins(10); Fx.at(card.querySelector("button"), "coins", 20);
       toast(`¡Reclamaste ${fmt(r.reward)} monedas! Racha de ${r.streak} día${r.streak === 1 ? "" : "s"} 🔥`, "gold");
     },
   });
@@ -330,7 +372,7 @@ VIEWS.inicio = async (root, token) => {
     label: () => "Ir a trabajar",
     claim: async card => {
       const r = await gpost("/api/claim/work");
-      w.ready_at = r.ready_at; setBalance(r.balance); burst(card, `+${fmt(r.reward)}`);
+      w.ready_at = r.ready_at; setBalance(r.balance); burst(card, `+${fmt(r.reward)}`); Sfx.coins(6); Fx.at(card.querySelector("button"), "coins", 12);
       toast(`${r.job} Ganaste ${fmt(r.reward)} monedas.`, "gold");
     },
   });
@@ -348,9 +390,9 @@ VIEWS.inicio = async (root, token) => {
     h("h3", { text: "Tu progreso" }), h("p", { class: "muted", text: `${fmt(lv.xp_in)} / ${fmt(lv.xp_need)} XP para el nivel ${lv.level + 1}` }),
     h("div", { class: "bar gold", style: { margin: "12px 0 6px" } }, h("i", { style: { width: Math.round(frac * 100) + "%" } })),
     h("p", { class: "note", text: `${fmt(lv.xp_total)} XP en total` })));
-  const stat = (label, value, sub) => h("div", { class: "card stat" }, h("small", { text: label }), h("b", { text: value }), sub ? h("em", { text: sub }) : null);
+  const stat = (label, value, sub, count) => h("div", { class: "card stat" }, h("small", { text: label }), h("b", { text: value, dataset: count != null ? { count } : {} }), sub ? h("em", { text: sub }) : null);
   const stats = h("div", { class: "grid g2" },
-    stat("Mensajes enviados", fmt(lv.messages)), stat("Tiempo en voz", fmtDur(lv.voice_seconds), "en canales de voz"),
+    stat("Mensajes enviados", fmt(lv.messages), null, lv.messages), stat("Tiempo en voz", fmtDur(lv.voice_seconds), "en canales de voz"),
     stat("Puesto en economía", `#${p.eco_rank}`, "entre todo el servidor"), stat("Puesto en niveles", lv.rank ? `#${lv.rank}` : "—", lv.rank ? "por XP total" : "todavía sin XP"));
 
   /* casino */
@@ -370,11 +412,13 @@ VIEWS.inicio = async (root, token) => {
     h("div", { class: "sec-title" }, h("h2", { text: "Recompensas" }), h("span", { text: "Reclamalas desde acá o con /daily y /trabajar" })),
     h("div", { class: "grid g2" }, daily, work),
     h("div", { class: "sec-title" }, h("h2", { text: "Tus estadísticas" }), h("span", { text: "Salen de tu actividad en Discord" })),
-    h("div", { class: "grid g2", style: { gridTemplateColumns: "minmax(0,1.1fr) minmax(0,1fr)" } }, levelCard, stats),
+    h("div", { class: "grid g2 split-a" }, levelCard, stats),
     h("div", { class: "sec-title" }, h("h2", { text: "Casino" })),
     h("div", { class: "grid g2" }, casinoCard("roulette", "Ruleta", "🎡"), casinoCard("blackjack", "Blackjack", "🃏")),
     h("div", { class: "sec-title" }, h("h2", { text: "Jugá ahora" })),
-    h("div", { class: "grid g2" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2")));
+    h("div", { class: "grid g3" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15")));
+  root.querySelectorAll("[data-count]").forEach(el => countUp(el, +el.dataset.count));
+  if (!S.intro) { S.intro = true; shownBal = 0; setBalance(S.profile.balance); }
 };
 
 /* ============================================================
@@ -428,389 +472,6 @@ VIEWS.ranking = async (root, token, kind = "eco") => {
 };
 
 /* ============================================================
-   RULETA
-   ============================================================ */
-const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
-const STEP = 360 / 37;
-const colorOf = n => (n === 0 ? "green" : RED.has(n) ? "red" : "black");
-const COLOR_ES = { red: "Rojo", black: "Negro", green: "Verde" };
-const BETS = {
-  red: { label: "Rojo", ratio: 1, count: 18, hint: "Salen los 18 números rojos" },
-  black: { label: "Negro", ratio: 1, count: 18, hint: "Salen los 18 números negros" },
-  even: { label: "Par", ratio: 1, count: 18, hint: "Números pares (el 0 no cuenta)" },
-  odd: { label: "Impar", ratio: 1, count: 18, hint: "Números impares" },
-  low: { label: "1-18", ratio: 1, count: 18, hint: "Del 1 al 18" },
-  high: { label: "19-36", ratio: 1, count: 18, hint: "Del 19 al 36" },
-  doc1: { label: "1ª docena", ratio: 2, count: 12, hint: "Del 1 al 12" },
-  doc2: { label: "2ª docena", ratio: 2, count: 12, hint: "Del 13 al 24" },
-  doc3: { label: "3ª docena", ratio: 2, count: 12, hint: "Del 25 al 36" },
-  col1: { label: "Columna 1", ratio: 2, count: 12, hint: "1, 4, 7 … 34" },
-  col2: { label: "Columna 2", ratio: 2, count: 12, hint: "2, 5, 8 … 35" },
-  col3: { label: "Columna 3", ratio: 2, count: 12, hint: "3, 6, 9 … 36" },
-};
-const betInfo = key => key[0] === "n" ? { label: `Número ${key.slice(1)}`, ratio: 35, count: 1, hint: `Solo gana si sale el ${key.slice(1)}` } : BETS[key];
-function wins(key, n) {
-  if (key[0] === "n") return n === +key.slice(1);
-  if (n === 0) return false;
-  switch (key) {
-    case "red": return RED.has(n); case "black": return !RED.has(n);
-    case "even": return n % 2 === 0; case "odd": return n % 2 === 1;
-    case "low": return n <= 18; case "high": return n >= 19;
-    case "doc1": return n <= 12; case "doc2": return n >= 13 && n <= 24; case "doc3": return n >= 25;
-    case "col1": return n % 3 === 1; case "col2": return n % 3 === 2; case "col3": return n % 3 === 0;
-  }
-  return false;
-}
-
-/* --- rueda dibujada en canvas --- */
-function drawWheelBase(px) {
-  const c = document.createElement("canvas"); c.width = c.height = px;
-  const g = c.getContext("2d"), cx = px / 2, R = px / 2 - 2;
-  const circle = (r, fill, stroke, lw) => {
-    g.beginPath(); g.arc(cx, cx, r, 0, Math.PI * 2);
-    if (fill) { g.fillStyle = fill; g.fill(); }
-    if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw; g.stroke(); }
-  };
-  let grad = g.createRadialGradient(cx, cx * .8, R * .2, cx, cx, R); grad.addColorStop(0, "#7a4a2a"); grad.addColorStop(1, "#2b160b");
-  circle(R, grad); circle(R * .965, "#5a3320"); circle(R * .945, null, "#e8c35a", px * .006);
-  circle(R * .92, "#14151b"); circle(R * .88, null, "#464b5a", px * .003); circle(R * .80, "#aa965a");
-  const rOut = R * .79, rIn = R * .56;
-  ORDER.forEach((n, i) => {
-    const a0 = (i * STEP - 90 - STEP / 2) * Math.PI / 180, a1 = a0 + STEP * Math.PI / 180;
-    g.beginPath(); g.arc(cx, cx, rOut, a0, a1); g.arc(cx, cx, rIn, a1, a0, true); g.closePath();
-    g.fillStyle = n === 0 ? "#0f7a4a" : RED.has(n) ? "#b91c2f" : "#15151d"; g.fill();
-    g.strokeStyle = "#cdbe8c"; g.lineWidth = px * .0025; g.stroke();
-  });
-  circle(rIn, "#c8a546"); circle(rIn * .95, "#28190f");
-  grad = g.createRadialGradient(cx * .95, cx * .9, 2, cx, cx, rIn * .55); grad.addColorStop(0, "#9a6a3f"); grad.addColorStop(1, "#4a2e1a");
-  circle(rIn * .55, grad, "#e8c35a", px * .006);
-  g.strokeStyle = "#e8c35a"; g.lineWidth = px * .012; g.lineCap = "round";
-  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; g.beginPath(); g.moveTo(cx, cx); g.lineTo(cx + rIn * .55 * Math.cos(a), cx + rIn * .55 * Math.sin(a)); g.stroke(); }
-  circle(rIn * .14, "#f4e4a0", "#e8c35a", px * .003);
-  g.fillStyle = "#fff"; g.font = `700 ${Math.round(px * .047)}px Outfit, Inter, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
-  ORDER.forEach((n, i) => {
-    g.save(); g.translate(cx, cx); g.rotate((i * STEP - 90) * Math.PI / 180); g.translate(R * .675, 0); g.fillText(String(n), 0, 0); g.restore();
-  });
-  return c;
-}
-
-function createWheel(canvas, size) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2), px = Math.round(size * dpr);
-  canvas.width = canvas.height = px;
-  const ctx = canvas.getContext("2d"), base = drawWheelBase(px), half = px / 2 - 2;
-  const rTrack = half * .855, rPocket = half * .675, br = px * .017;
-  let rot = Math.random() * 360, phi = null, ballR = rPocket, raf = 0, last = performance.now(), spinning = false, dead = false;
-
-  function render() {
-    ctx.clearRect(0, 0, px, px);
-    ctx.save(); ctx.translate(px / 2, px / 2); ctx.rotate(-rot * Math.PI / 180); ctx.drawImage(base, -px / 2, -px / 2); ctx.restore();
-    if (phi == null) return;
-    const th = (rot + phi) * Math.PI / 180, x = px / 2 + ballR * Math.cos(th), y = px / 2 - ballR * Math.sin(th);
-    ctx.beginPath(); ctx.arc(x + br * .3, y + br * .45, br, 0, Math.PI * 2); ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fill();
-    const gr = ctx.createRadialGradient(x - br * .35, y - br * .35, br * .1, x, y, br); gr.addColorStop(0, "#fff"); gr.addColorStop(1, "#bfc3d0");
-    ctx.beginPath(); ctx.arc(x, y, br, 0, Math.PI * 2); ctx.fillStyle = gr; ctx.fill();
-  }
-  function loop(t) {
-    if (dead) return;
-    if (!spinning) rot += (t - last) / 1000 * 4;          // gira despacito mientras espera
-    last = t; render(); raf = requestAnimationFrame(loop);
-  }
-  raf = requestAnimationFrame(loop);
-
-  const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
-  return {
-    destroy() { dead = true; cancelAnimationFrame(raf); },
-    spinTo(number, ms = 6500) {
-      return new Promise(resolve => {
-        spinning = true;
-        const pocket = 90 - ORDER.indexOf(number) * STEP, w0 = rot, lapsW = .6, lapsB = 3.6, t0 = performance.now();
-        const step = t => {
-          if (dead) return resolve();
-          const u = Math.min(1, (t - t0) / ms), p = 1 - Math.pow(1 - u, 3);
-          rot = w0 + 360 * lapsW * p;
-          phi = pocket + 360 * lapsB * (1 - p);
-          const s = smooth((u - .60) / .34);
-          ballR = rTrack + (rPocket - rTrack) * s;
-          if (u > .60 && u < .97) ballR += Math.abs(Math.sin((u - .60) * 26)) * Math.pow(1 - s, 2) * half * .07;
-          if (u < 1) requestAnimationFrame(step); else { phi = pocket; ballR = rPocket; spinning = false; resolve(); }
-        };
-        requestAnimationFrame(step);
-      });
-    },
-  };
-}
-
-/* --- tablero --- */
-function buildBoard(onPick, onInfo) {
-  const zones = new Map();
-  const mk = (key, cls, grid, ...kids) => {
-    const el = h("button", { class: `zone ${cls}`, dataset: { key }, style: grid, "aria-label": betInfo(key).label, onclick: () => onPick(key), onmouseenter: () => onInfo(key), onfocus: () => onInfo(key),
-      oncontextmenu: e => { e.preventDefault(); onPick(key, true); } }, ...kids);
-    zones.set(key, el); return el;
-  };
-  const cells = [mk("n0", "green", { gridRow: "1 / 4", gridColumn: "1" }, "0")];
-  for (let n = 1; n <= 36; n++) {
-    const c = Math.floor((n - 1) / 3), r = 2 - (n - 1) % 3;
-    cells.push(mk(`n${n}`, colorOf(n), { gridColumn: String(2 + c), gridRow: String(1 + r) }, String(n)));
-  }
-  [3, 2, 1].forEach((k, r) => cells.push(mk(`col${k}`, "out", { gridColumn: "14", gridRow: String(1 + r) }, "2:1")));
-  [1, 2, 3].forEach(k => cells.push(mk(`doc${k}`, "out wide", { gridColumn: `${2 + (k - 1) * 4} / span 4`, gridRow: "4" }, `${k}ª docena`)));
-  const outs = [["low", "1-18"], ["even", "PAR"], ["red", null], ["black", null], ["odd", "IMPAR"], ["high", "19-36"]];
-  outs.forEach(([key, label], i) => cells.push(mk(key, "out wide", { gridColumn: `${2 + i * 2} / span 2`, gridRow: "5" }, label || h("span", { class: `dia ${key}` }))));
-  const el = h("div", { class: "board" }, cells);
-  return { el, zones };
-}
-
-VIEWS.ruleta = async (root, token) => {
-  const lim = S.profile.limits;
-  const chipVals = [10, 50, 100, 500, 1000, 5000].filter(v => v >= lim.rl_min && v <= lim.rl_max);
-  const st = { chip: chipVals.includes(100) ? 100 : chipVals[0], bets: [], last: [], busy: false };
-  let history = [];
-  try { history = (await gget("/api/roulette/history")).history; } catch { /* sin historial */ }
-  if (!alive(token)) return;
-
-  const canvas = h("canvas"), pop = h("div", { class: "wheel-pop" }), histEl = h("div", { class: "hist" });
-  const wheel = createWheel(canvas, 400);
-  S.cleanups.push(() => wheel.destroy());
-  const paintHistory = () => histEl.replaceChildren(...(history.length ? history.slice(-12).map(n => h("i", { class: colorOf(n), text: String(n) }))
-    : [h("span", { class: "note", text: "Todavía no salió ningún número" })]));
-  paintHistory();
-
-  const infoBar = h("div", { class: "info-bar" }, "👆 Tocá una zona del tablero para apostar. Pasá el mouse (o tocá) para ver cuánto paga y qué chances tiene.");
-  const showInfo = key => {
-    const b = betInfo(key);
-    infoBar.replaceChildren(h("b", { text: b.label }), h("span", { text: `paga ${b.ratio} a 1` }), h("span", { class: "muted", text: `· ${pct(b.count)} de chances (${b.count} de 37)` }), h("span", { class: "muted", text: `· ${b.hint}` }),
-      h("span", { class: "gold", text: `· con ${fmt(st.chip)} cobrás ${fmt(st.chip * (b.ratio + 1))}` }));
-  };
-
-  const totals = () => { const m = new Map(); st.bets.forEach(b => m.set(b.key, (m.get(b.key) || 0) + b.amount)); return m; };
-  const totalBet = () => st.bets.reduce((a, b) => a + b.amount, 0);
-  const clearHighlight = () => { board.el.classList.remove("dim"); board.zones.forEach(z => z.classList.remove("win")); resultBox.replaceChildren(); pop.replaceChildren(); };
-
-  const totalEl = h("b", { text: "0" }), zonesEl = h("span", { text: "0" });
-  const spinBtn = h("button", { class: "btn btn-gold btn-lg", onclick: spin }, icon("wheel"), "GIRAR");
-  const undoBtn = h("button", { class: "btn btn-ghost btn-sm", onclick: () => { st.bets.pop(); refresh(); } }, icon("undo"), "Deshacer");
-  const clearBtn = h("button", { class: "btn btn-ghost btn-sm", onclick: () => { st.bets = []; refresh(); } }, icon("trash"), "Limpiar");
-  const repeatBtn = h("button", { class: "btn btn-ghost btn-sm", onclick: () => { clearHighlight(); st.bets = st.last.map(b => ({ ...b })); fitToBalance(); refresh(); } }, icon("refresh"), "Repetir");
-  const doubleBtn = h("button", { class: "btn btn-ghost btn-sm", text: "×2", onclick: () => { clearHighlight(); const extra = st.bets.map(b => ({ ...b })); st.bets.push(...extra); fitToBalance(); refresh(); } });
-
-  function fitToBalance() {           // si no alcanza el saldo, se recortan las últimas fichas
-    while (st.bets.length && totalBet() > S.profile.balance) { st.bets.pop(); toast("Quité fichas: no te alcanzaba el saldo.", "err"); }
-  }
-  function refresh() {
-    const t = totals();
-    board.zones.forEach((el, key) => {
-      const v = t.get(key) || 0; let s = el.querySelector(".stack");
-      if (v) { if (!s) { s = h("span", { class: "stack" }); el.append(s); } s.textContent = short(v); } else if (s) s.remove();
-    });
-    totalEl.textContent = fmt(totalBet()); zonesEl.textContent = String(t.size);
-    spinBtn.disabled = st.busy || !st.bets.length;
-    undoBtn.disabled = clearBtn.disabled = doubleBtn.disabled = st.busy || !st.bets.length;
-    repeatBtn.disabled = st.busy || !st.last.length;
-  }
-  function pick(key, remove = false) {
-    if (st.busy) return;
-    clearHighlight();
-    if (remove) { st.bets = st.bets.filter(b => b.key !== key); return refresh(); }
-    const t = totals(), cur = t.get(key) || 0;
-    if (cur + st.chip > lim.rl_max) return toast(`Máximo ${fmt(lim.rl_max)} por zona.`, "err");
-    if (totalBet() + st.chip > S.profile.balance) return toast("No te alcanza el saldo para esa ficha.", "err");
-    if (!t.has(key) && t.size >= 30) return toast("Máximo 30 zonas por tirada.", "err");
-    st.bets.push({ key, amount: st.chip }); showInfo(key); refresh();
-  }
-  const board = buildBoard(pick, showInfo);
-  const resultBox = h("div");
-
-  const chipEls = chipVals.map(v => h("button", { class: `chip c${v} ${v === st.chip ? "sel" : ""}`, "aria-label": `Ficha de ${v}`, text: short(v),
-    onclick: () => { st.chip = v; chipEls.forEach(c => c.classList.toggle("sel", c === chipEls[chipVals.indexOf(v)])); } }));
-
-  async function spin() {
-    if (st.busy || !st.bets.length) return;
-    st.busy = true; refresh();
-    const merged = [...totals()].map(([key, amount]) => ({ key, amount })), total = totalBet(), before = S.profile.balance;
-    setBalance(before - total);
-    let r;
-    try { r = await gpost("/api/roulette/spin", { bets: merged }); }
-    catch (e) { toast(e.message, "err"); setBalance(before); st.busy = false; refresh(); return; }
-    await wheel.spinTo(r.number);
-    if (!alive(token)) return;
-    history = r.history; paintHistory();
-    pop.replaceChildren(h("div", { class: `num ${r.color}`, text: String(r.number) }));
-    board.el.classList.add("dim");
-    board.zones.forEach((z, key) => z.classList.toggle("win", wins(key, r.number)));
-    st.last = merged; st.bets = [];
-    setBalance(r.balance);
-    const net = r.net;
-    resultBox.replaceChildren(h("div", { class: "result-panel" },
-      h("h3", {}, `Salió el ${r.number} `, h("span", { class: "muted", text: `· ${r.tags.join(" · ")}` })),
-      h("p", { class: net >= 0 ? "pos" : "neg", style: { fontWeight: "700", marginTop: "4px", fontSize: "18px" },
-        text: net > 0 ? `¡Ganaste +${fmt(net)} monedas! 🎉` : net === 0 ? "Recuperaste lo apostado." : `Perdiste ${fmt(-net)} monedas.` }),
-      h("div", { class: "rows" }, r.results.map(x => h("div", { class: `r ${x.won ? "w" : ""}` },
-        h("span", { text: `${x.label} · ${fmt(x.amount)}` }), h("b", { class: x.won ? "pos" : "muted", text: x.won ? `+${fmt(x.payout - x.amount)}` : `−${fmt(x.amount)}` }))))));
-    if (net > 0) toast(`¡Ganaste ${fmt(net)} monedas en la ruleta! 🎡`, "gold");
-    st.busy = false; refresh();
-  }
-
-  const how = h("details", { class: "how card" }, h("summary", {}, icon("help"), "¿Cómo se juega? (guía rápida)"),
-    h("div", { class: "how-grid" },
-      h("div", {}, h("b", { text: "1 · Elegí tu ficha" }), "Tocá una ficha y después las zonas del tablero donde querés apostar. Podés poner varias. Clic derecho en una zona la quita."),
-      h("div", {}, h("b", { text: "2 · Mirá los pagos" }), "Rojo/Negro, Par/Impar y 1-18/19-36 pagan 1 a 1. Docenas y columnas pagan 2 a 1. Un número pleno paga 35 a 1."),
-      h("div", {}, h("b", { text: "3 · ¡Girá!" }), "El 0 es verde: solo gana quien apostó a ese número. La casa tiene 2,7% de ventaja, así que jugá por diversión.")));
-
-  refresh();
-  root.replaceChildren(sectionTitle("Ruleta europea", "Un solo cero, mismas reglas y pagos que el comando /ruleta del servidor."),
-    h("div", { class: "rl" },
-      h("div", { class: "card wheel-card" }, h("div", { class: "wheel-box" }, canvas, pop), h("div", { class: "hist-label", text: "Últimos números" }), histEl),
-      h("div", {},
-        h("div", { class: "felt" }, h("div", { class: "board-wrap" }, board.el), infoBar),
-        h("div", { class: "rl-actions" },
-          h("div", { class: "left" }, h("div", { class: "chips" }, chipEls),
-            h("div", { class: "chips" }, undoBtn, clearBtn, repeatBtn, doubleBtn)),
-          h("div", { style: { display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-end" } },
-            h("div", { class: "rl-total" }, "Apuesta total: ", totalEl, " · zonas: ", zonesEl), spinBtn)),
-        resultBox)),
-    how);
-};
-
-/* ============================================================
-   BLACKJACK
-   ============================================================ */
-const OUT = {
-  blackjack: { t: "¡BLACKJACK!", cls: "bj" }, win: { t: "¡GANASTE!", cls: "win" }, dealer_bust: { t: "EL DEALER SE PASÓ", cls: "win" },
-  lose: { t: "PERDISTE", cls: "lose" }, bust: { t: "TE PASASTE", cls: "lose" }, dealer_blackjack: { t: "BLACKJACK DEL DEALER", cls: "lose" }, push: { t: "EMPATE", cls: "push" },
-};
-function handValue(cards) {
-  let total = 0, aces = 0;
-  for (const c of cards) { if (!c) continue; const r = c[0]; if (r === "A") { total += 11; aces++; } else total += "JQK".includes(r) ? 10 : +r; }
-  while (total > 21 && aces) { total -= 10; aces--; }
-  return total;
-}
-function cardEl(c, extra = "", delay = 0) {
-  const attrs = { class: `pcard ${c ? (c[1] === "♥" || c[1] === "♦" ? "red" : "") : "back"} ${extra}`, style: delay ? { animationDelay: delay + "ms" } : {} };
-  if (!c) return h("div", attrs);
-  return h("div", attrs, h("div", { class: "tl" }, c[0], h("small", { text: c[1] })), h("div", { class: "mid", text: c[1] }), h("div", { class: "br" }, c[0], h("small", { text: c[1] })));
-}
-
-VIEWS.blackjack = async (root, token) => {
-  const lim = S.profile.limits;
-  const chipVals = [10, 50, 100, 500, 1000, 5000].filter(v => v >= lim.bj_min && v <= lim.bj_max);
-  const st = { bet: chipVals.includes(100) ? 100 : chipVals[0], game: null, busy: false, shown: { player: 0, dealer: 0 }, finished: false };
-  const data = await gget("/api/blackjack");
-  if (!alive(token)) return;
-  setBalance(data.balance, false);
-
-  const dealerHand = h("div", { class: "hand" }), playerHand = h("div", { class: "hand" });
-  const dealerVal = h("span", { class: "val", text: "" }), playerVal = h("span", { class: "val", text: "" });
-  const mid = h("div", { class: "bj-mid" });
-  const table = h("div", { class: "bj-table" },
-    h("div", { class: "seat" }, h("div", { class: "seat-label" }, "Dealer", dealerVal), dealerHand), mid,
-    h("div", { class: "seat" }, h("div", { class: "seat-label" }, "Tu mano", playerVal), playerHand));
-  const controls = h("div", { class: "bj-controls" });
-
-  const setVal = (el, v, bust) => { el.textContent = v == null ? "" : String(v); el.classList.toggle("bust", !!bust); el.classList.toggle("hide", v == null); };
-  const drawHand = (el, cards, from) => el.replaceChildren(...cards.map((c, i) => cardEl(c, i >= from ? "deal" : "", Math.max(0, i - from) * 140)));
-  const clearBanner = () => mid.replaceChildren();
-
-  function paintActive(g) {
-    drawHand(playerHand, g.player, st.shown.player); st.shown.player = g.player.length;
-    drawHand(dealerHand, g.dealer, st.shown.dealer); st.shown.dealer = g.dealer.length;
-    setVal(playerVal, g.player_value, g.player_value > 21); setVal(dealerVal, g.dealer_value, false);
-  }
-
-  async function reveal(g) {                         // fin de la mano: el dealer da vuelta su carta y juega
-    st.busy = true; renderControls();
-    drawHand(playerHand, g.player, st.shown.player); st.shown.player = g.player.length;
-    setVal(playerVal, g.player_value, g.player_value > 21);
-    const d = g.dealer;
-    if (!dealerHand.children.length) { drawHand(dealerHand, [d[0], null], 0); setVal(dealerVal, handValue([d[0]]), false); }
-    await sleep(g.player.length > 2 ? 650 : 900);
-    if (!alive(token)) return;
-    dealerHand.children[1].replaceWith(cardEl(d[1], "flip")); setVal(dealerVal, handValue(d.slice(0, 2)), false);
-    for (let i = 2; i < d.length; i++) {
-      await sleep(800); if (!alive(token)) return;
-      dealerHand.append(cardEl(d[i], "deal")); setVal(dealerVal, handValue(d.slice(0, i + 1)), handValue(d.slice(0, i + 1)) > 21);
-    }
-    st.shown.dealer = d.length;
-    await sleep(550); if (!alive(token)) return;
-    const o = OUT[g.outcome];
-    mid.append(h("div", { class: `banner ${o.cls}` }, o.t,
-      h("small", { text: g.net > 0 ? `+${fmt(g.net)} monedas` : g.net < 0 ? `−${fmt(-g.net)} monedas` : "Te devuelvo tu apuesta" })));
-    setBalance(g.balance);
-    if (g.net > 0) toast(`¡Ganaste ${fmt(g.net)} monedas en el blackjack! 🃏`, "gold");
-    st.game = null; st.finished = true; st.busy = false; renderControls();
-  }
-
-  async function act(action) {
-    if (st.busy) return;
-    st.busy = true; renderControls();
-    const g0 = st.game;
-    if (action === "double") setBalance(S.profile.balance - g0.base_bet);
-    try {
-      const r = await gpost("/api/blackjack/action", { action });
-      st.game = r.game; st.busy = false;
-      if (r.game.active) { paintActive(r.game); setBalance(r.balance); renderControls(); } else await reveal(r.game);
-    } catch (e) {
-      toast(e.message, "err"); st.busy = false; setBalance(g0 ? S.profile.balance + (action === "double" ? g0.base_bet : 0) : S.profile.balance);
-      if (e.status === 404) { st.game = null; clearTable(); }
-      renderControls();
-    }
-  }
-
-  function clearTable() { dealerHand.replaceChildren(); playerHand.replaceChildren(); setVal(dealerVal, null); setVal(playerVal, null); st.shown = { player: 0, dealer: 0 }; clearBanner(); }
-
-  async function deal() {
-    if (st.busy) return;
-    if (st.bet > S.profile.balance) return toast("No te alcanza el saldo para esa apuesta.", "err");
-    st.busy = true; st.finished = false; renderControls(); clearTable();
-    const before = S.profile.balance;
-    try {
-      const r = await gpost("/api/blackjack/deal", { bet: st.bet });
-      st.game = r.game;
-      if (r.game.active) { setBalance(r.balance); paintActive(r.game); st.busy = false; renderControls(); }
-      else { setBalance(before - st.bet); drawHand(dealerHand, [r.game.dealer[0], null], 0); drawHand(playerHand, r.game.player, 0); await reveal(r.game); }
-    } catch (e) { toast(e.message, "err"); st.busy = false; if (e.status === 409) await restore(); renderControls(); }
-  }
-  async function restore() {
-    const d = await gget("/api/blackjack");
-    if (d.game && d.game.active) { st.game = d.game; clearTable(); paintActive(d.game); setBalance(d.balance, false); }
-  }
-
-  const btn = (cls, label, fn, disabled) => h("button", { class: `btn ${cls} btn-lg`, disabled: disabled || st.busy, onclick: fn }, label);
-  function renderControls() {
-    const g = st.game;
-    if (g && g.active) {
-      controls.replaceChildren(
-        btn("btn-primary", "🃏 Pedir", () => act("hit")), btn("btn-ghost", "✋ Plantarse", () => act("stand")),
-        btn("btn-gold", `💰 Doblar (${fmt(g.base_bet)})`, () => act("double"), !g.can_double || S.profile.balance < g.base_bet));
-      return;
-    }
-    const input = h("input", { class: "num-input", type: "number", inputmode: "numeric", min: lim.bj_min, max: lim.bj_max, value: st.bet, "aria-label": "Apuesta",
-      oninput: e => { st.bet = Math.max(0, Math.min(lim.bj_max, parseInt(e.target.value || "0", 10) || 0)); chips.forEach(c => c.classList.remove("sel")); } });
-    const chips = chipVals.map(v => h("button", { class: `chip c${v} ${v === st.bet ? "sel" : ""}`, disabled: st.busy, text: short(v),
-      onclick: () => { st.bet = v; input.value = v; chips.forEach(c => c.classList.toggle("sel", c.textContent === short(v))); } }));
-    controls.replaceChildren(h("div", { class: "bj-bet" },
-      h("div", { class: "row" }, chips, input),
-      h("div", { class: "row" }, h("button", { class: "btn btn-gold btn-lg", disabled: st.busy || st.bet < lim.bj_min, onclick: deal, text: st.finished ? `Otra mano · ${fmt(st.bet)}` : `Repartir · ${fmt(st.bet)}` })),
-      h("p", { class: "note", text: `Apuesta de ${fmt(lim.bj_min)} a ${fmt(lim.bj_max)} monedas.` })));
-  }
-
-  if (data.game && data.game.active) { st.game = data.game; paintActive(data.game); } else { setVal(dealerVal, null); setVal(playerVal, null); }
-  if (data.expired) {
-    const o = OUT[data.expired.outcome];
-    toast(`Tu mano anterior se cerró por inactividad (me planté por vos): ${o ? o.t.toLowerCase() : ""}.`);
-  }
-  renderControls();
-
-  const how = h("details", { class: "how card" }, h("summary", {}, icon("help"), "¿Cómo se juega? (guía rápida)"),
-    h("div", { class: "how-grid" },
-      h("div", {}, h("b", { text: "Objetivo" }), "Acercate a 21 sin pasarte y ganale al dealer. Las figuras valen 10 y el As vale 11 u 1, lo que más te convenga."),
-      h("div", {}, h("b", { text: "Tus opciones" }), "Pedir suma una carta. Plantarse termina tu turno. Doblar duplica la apuesta, te da una sola carta y te planta."),
-      h("div", {}, h("b", { text: "Pagos" }), "Ganar paga 1 a 1, el Blackjack natural (21 con dos cartas) paga 3 a 2 y el empate devuelve la apuesta. El dealer se planta en 17.")));
-  root.replaceChildren(sectionTitle("Blackjack", "Mismas reglas que /blackjack: mazo de 6, el dealer se planta en 17."), h("div", { class: "bj" }, table, controls), how);
-};
-
-/* ============================================================
    Arranque
    ============================================================ */
 window.addEventListener("hashchange", route);
@@ -828,4 +489,4 @@ async function boot() {
   history.replaceState(null, "", location.pathname + location.hash);
   renderShell(); route();
 }
-boot();
+if (document.readyState === "complete") boot(); else document.addEventListener("DOMContentLoaded", boot);   // los scripts con defer corren antes de este evento
