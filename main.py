@@ -58,7 +58,7 @@ class DilusBot(commands.Bot):
         for ext in EXTENSIONS:
             try:
                 await self.load_extension(ext)
-                log.info("MÃ³dulo cargado: %s", ext)
+                log.info("Módulo cargado: %s", ext)
             except Exception:
                 log.exception("No se pudo cargar %s", ext)
         synced = await self.tree.sync()
@@ -73,7 +73,7 @@ class DilusBot(commands.Bot):
     async def clear_old_guild_commands(self):
         """Borra comandos registrados solo para un servidor (de un bot/host anterior con el mismo token).
 
-        Los comandos nuevos son globales, asÃ­ que esto no los toca.
+        Los comandos nuevos son globales, así que esto no los toca.
         """
         for guild in self.guilds:
             try:
@@ -89,17 +89,17 @@ class DilusBot(commands.Bot):
 
     async def on_tree_error(self, interaction: discord.Interaction, err: app_commands.AppCommandError):
         if isinstance(err, app_commands.MissingPermissions):
-            msg = "No tenÃ©s permisos para usar este comando."
+            msg = "No tenés permisos para usar este comando."
         elif isinstance(err, app_commands.BotMissingPermissions):
             perms = ", ".join(err.missing_permissions)
             msg = f"Me faltan permisos para hacer eso: `{perms}`."
         elif isinstance(err, app_commands.CommandOnCooldown):
-            msg = f"EsperÃ¡ {err.retry_after:.0f}s antes de volver a usarlo."
+            msg = f"Esperá {err.retry_after:.0f}s antes de volver a usarlo."
         elif isinstance(err, app_commands.NoPrivateMessage):
             msg = "Este comando solo funciona dentro de un servidor."
         else:
             log.exception("Error en comando /%s", getattr(interaction.command, "name", "?"), exc_info=err)
-            msg = "OcurriÃ³ un error inesperado. ProbÃ¡ de nuevo en un rato."
+            msg = "Ocurrió un error inesperado. Probá de nuevo en un rato."
 
         try:
             if interaction.response.is_done():
@@ -114,7 +114,7 @@ def main():
     token = os.getenv("DISCORD_TOKEN")
     if not token:
         raise SystemExit(
-            "Falta DISCORD_TOKEN. CreÃ¡ un archivo .env (mirÃ¡ .env.example) "
+            "Falta DISCORD_TOKEN. Creá un archivo .env (mirá .env.example) "
             "o cargalo como variable de entorno en el panel del hosting."
         )
     DilusBot().run(token, log_handler=None)
