@@ -116,6 +116,28 @@ const Sfx = (() => {
     notify() { tone({ f: 880, dur: 0.12, vol: 0.07 }); tone({ f: 1318, dur: 0.22, vol: 0.06, at: 0.09 }); },
   };
 
+  Object.assign(S, {
+    chestCharge() {                                    // el cofre se "carga": retumbo grave + chispitas que suben
+      hiss({ type: "lowpass", f: 140, to: 540, dur: 0.95, vol: 0.14, attack: 0.2 });
+      tone({ f: 70, to: 230, type: "sawtooth", dur: 0.95, vol: 0.045, attack: 0.3 });
+      for (let i = 0; i < 5; i++) tone({ f: 1800 + i * 230, dur: 0.05, vol: 0.025, at: 0.3 + i * 0.13 });
+    },
+    chestOpen() {                                      // se abre la tapa: ráfaga de luz
+      hiss({ type: "highpass", f: 700, to: 6500, dur: 0.4, vol: 0.2 });
+      tone({ f: 260, to: 1100, type: "triangle", dur: 0.35, vol: 0.1 });
+      [523, 659, 784].forEach((f, i) => tone({ f, dur: 0.5, vol: 0.07, at: 0.08 + i * 0.04 }));
+    },
+    reelTick(power = 0.5) {                            // clic de la ruleta al pasar cada premio
+      tone({ f: 1250 + power * 500, to: 760, type: "square", dur: 0.028, vol: 0.03 + power * 0.05 });
+      hiss({ f: 3200, q: 3, dur: 0.018, vol: 0.05 });
+    },
+    reveal(tier = 0) {                                 // más notas (y monedas) cuanto mejor el tramo
+      const base = [392, 494, 587, 740, 880, 1047, 1319], n = Math.min(base.length, 3 + tier);
+      base.slice(0, n).forEach((f, i) => { tone({ f, type: "triangle", dur: 0.4, vol: 0.13, at: i * 0.09 }); tone({ f: f * 2, dur: 0.28, vol: 0.04, at: i * 0.09 }); });
+      if (tier >= 3) S.coins(10 + tier * 3);
+    },
+  });
+
   return {
     ...S,
     get muted() { return prefs.muted; },

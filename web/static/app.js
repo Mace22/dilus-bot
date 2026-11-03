@@ -52,6 +52,7 @@ Object.assign(ICONS, {
   volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
   volumeOff: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
   send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+  chest: '<path d="M3 11h18v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 11V8a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v3"/><rect x="10" y="12" width="4" height="4" rx="1"/>',
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -207,6 +208,7 @@ const NAV = [
   { id: "ruleta", label: "Ruleta", icon: "wheel" },
   { id: "blackjack", label: "Blackjack", icon: "cards" },
   { id: "slots", label: "Slots", icon: "slots" },
+  { id: "cofres", label: "Cofres", icon: "chest" },
   { id: "tienda", label: "Tienda", icon: "bag" },
   { id: "ranking", label: "Ranking", icon: "trophy" },
   { id: "logros", label: "Logros", icon: "star" },
@@ -284,6 +286,7 @@ function route() {
   S.cleanups.splice(0).forEach(fn => { try { fn(); } catch { /* ya no existe */ } });
   const token = ++S.routeToken;
   document.querySelectorAll(".nav a").forEach(a => a.classList.toggle("on", a.dataset.id === name));
+  const active = $(".nav a.on"); if (active && active.scrollIntoView) active.scrollIntoView({ inline: "center", block: "nearest" });
   const view = $("#view");
   if (!view) return;
   view.replaceChildren(h("div", { class: "grid g3" }, [1, 2, 3].map(() => h("div", { class: "skeleton", style: { height: "150px" } }))));
@@ -334,6 +337,9 @@ VIEWS.inicio = async (root, token) => {
   if (!alive(token)) return;
   setBalance(S.profile.balance, false);
   const p = S.profile, lv = p.level, d = p.daily;
+  let chestSt = null;
+  try { chestSt = await gget("/api/chests"); } catch { /* los cofres pueden estar desactivados */ }
+  if (!alive(token)) return;
 
   /* encabezado */
   const hero = h("section", { class: "card hero" },
@@ -410,13 +416,14 @@ VIEWS.inicio = async (root, token) => {
 
   root.replaceChildren(hero,
     h("div", { class: "sec-title" }, h("h2", { text: "Recompensas" }), h("span", { text: "Reclamalas desde acá o con /daily y /trabajar" })),
-    h("div", { class: "grid g2" }, daily, work),
+    h("div", { class: chestSt ? "grid g3" : "grid g2" }, daily, work, chestSt ? chestTeaser(chestSt) : null),
     h("div", { class: "sec-title" }, h("h2", { text: "Tus estadísticas" }), h("span", { text: "Salen de tu actividad en Discord" })),
     h("div", { class: "grid g2 split-a" }, levelCard, stats),
     h("div", { class: "sec-title" }, h("h2", { text: "Casino" })),
     h("div", { class: "grid g2" }, casinoCard("roulette", "Ruleta", "🎡"), casinoCard("blackjack", "Blackjack", "🃏")),
     h("div", { class: "sec-title" }, h("h2", { text: "Jugá ahora" })),
-    h("div", { class: "grid g3" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15")));
+    h("div", { class: chestSt ? "grid g2" : "grid g3" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15"),
+      chestSt ? play("cofres", "🎁", "Cofres", "Racha diaria y cofres comprables") : null));
   root.querySelectorAll("[data-count]").forEach(el => countUp(el, +el.dataset.count));
   if (!S.intro) { S.intro = true; shownBal = 0; setBalance(S.profile.balance); }
 };
