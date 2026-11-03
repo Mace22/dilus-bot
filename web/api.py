@@ -13,6 +13,9 @@ THROTTLE = {
     "/api/shop/buy": 1.0,
     "/api/slots/spin": 1.0,
     "/api/pay": 1.5,
+    "/api/chests/claim": 1.0,
+    "/api/chests/open": 1.0,
+    "/api/chests/buy": 0.8,
 }
 
 
@@ -45,6 +48,10 @@ class Api:
             ("GET", "/api/achievements"): lambda g, u, q, b: self.svc.achievements(g, u),
             ("GET", "/api/members"): lambda g, u, q, b: self.svc.members(g, u, q.get("q")),
             ("POST", "/api/pay"): lambda g, u, q, b: self.svc.pay(g, u, b.get("target"), b.get("amount")),
+            ("GET", "/api/chests"): lambda g, u, q, b: self.svc.chests_state(g, u),
+            ("POST", "/api/chests/claim"): lambda g, u, q, b: self.svc.chests_claim(g, u, b.get("request_id")),
+            ("POST", "/api/chests/open"): lambda g, u, q, b: self.svc.chests_open(g, u, b.get("rarity"), b.get("request_id")),
+            ("POST", "/api/chests/buy"): lambda g, u, q, b: self.svc.chests_buy(g, u, b.get("rarity"), b.get("qty", 1), b.get("request_id")),
         }
 
     def throttle(self, uid: int, path: str):

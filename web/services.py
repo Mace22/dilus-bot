@@ -15,6 +15,7 @@ from cogs.levels import level_from_xp
 from cogs.roulette import MAX_BET as RL_MAX_BET
 from cogs.roulette import MIN_BET as RL_MIN_BET
 from utils import roulette as rl
+from utils.chests import ChestError
 from web.common import ApiError
 
 log = logging.getLogger("dilus-bot.web")
@@ -553,3 +554,47 @@ class Services:
             for i, ic, n, d, v, g, t in defs
         ]
         return {"items": items, "unlocked": sum(1 for x in items if x["unlocked"]), "total": len(items)}
+
+    # ------------------------------------------------------------------
+    # Cofres (toda la lógica vive en utils/chests.py: es la MISMA que usan los comandos de Discord)
+    # ------------------------------------------------------------------
+    @property
+    def chests(self):
+        cog = self.bot.get_cog("Chests")
+        if cog is None:
+            raise ApiError("Los cofres no están activos en este bot.", 503)
+        return cog.service
+
+    @staticmethod
+    def _chest_status(code: str) -> int:
+        return {"cooldown": 409, "no_stock": 409, "funds": 402, "unavailable": 503}.get(code, 400)
+
+    async def _chest_call(self, coro):
+        try:
+            return await coro
+        except ChestError as exc:
+            raise ApiError(exc.message, self._chest_status(exc.code), code=exc.code, **exc.extra)
+
+    async def chests_state(self, gid: int, uid: int) -> dict:
+        guild = self.guild(gid)
+        svc = self.chests
+        state = await self._chest_call(svc.state(gid, uid))
+        ranking = []
+        for row in await svc.ranking(gid, 10):
+            name, avatar = await self.who(guild, row["user_id"])
+            ranking.append({"id": str(row["user_id"]), "name": name, "avatar": avatar, "streak": row["streak"], "best": row["best"]})
+        state["ranking"] = ranking
+        return state
+
+    async def chests_claim(self, gid: int, uid: int, request_id) -> dict:
+        result = await self._chest_call(self.chests.claim_daily(gid, uid, request_id))
+        result["history"] = await self.chests.history(gid, uid)
+        return result
+
+    async def chests_open(self, gid: int, uid: int, rarity, request_id) -> dict:
+        result = await self._chest_call(self.chests.open_bought(gid, uid, rarity, request_id))
+        result["history"] = await self.chests.history(gid, uid)
+        return result
+
+    async def chests_buy(self, gid: int, uid: int, rarity, qty, request_id) -> dict:
+        return await self._chest_call(self.chests.buy(gid, uid, rarity, qty, request_id))
