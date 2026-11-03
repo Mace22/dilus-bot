@@ -10,6 +10,9 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 | 🤖 **IA con Gemini** | `/ask`, `/olvidar`, `/traducir` y también charlás **mencionando al bot** (`@Dilu's Bot hola`). Recuerda la charla de cada persona |
 | 💘 **Match** | `/match usuario1 [usuario2]` → imagen con los dos avatares, corazón que se llena y % de compatibilidad (siempre da lo mismo para la misma pareja) |
 | 🃏 **Blackjack** | `/blackjack apuesta` → mesa con cartas en imagen que ve todo el chat. Botones **Pedir / Plantarse / Doblar**, el dealer se planta en 17, el Blackjack paga 3:2 y hay botón para jugar otra mano. Se juega con las monedas de la economía |
+| 🎡 **Ruleta** | `/ruleta [tiempo]` → abre una mesa en el canal y **todo el chat** puede apostar con las monedas de la economía: Rojo/Negro, Par/Impar, 1-18/19-36, docenas, columnas y número pleno. Tablero en imagen con las fichas de cada zona, rueda animada, pagos al instante y guía didáctica (botón ❓). Si el bot se reinicia a mitad de una ronda, devuelve las apuestas |
+| 📦 **Cofres** | `/cofre info\|abrir\|inventario\|comprar\|abrir_comprado\|ranking\|probabilidades` → cofre diario gratis con racha propia (común → legendario) y cofres comprables, con ruleta de apertura en Discord y en el panel web. Solo dan monedas. Admins: `/cofreadmin`. Detalles en `COFRES.md` |
+| 🌐 **Panel web** | `/panel` → abre una página con tu saldo, `/daily` y `/trabajar` con cuenta regresiva, nivel/XP/horas en voz, **ruleta, blackjack y tragamonedas** jugables con animaciones y sonido, **logros**, historial con gráfico de ganancias, **envío de monedas**, tienda de roles y rankings. Entrás con tu cuenta de Discord |
 | 🪙 **Economía** | `/balance`, `/daily` (con racha), `/trabajar`, `/pay`, `/ricos`, `/apostar`, `/slots`, `/tienda`, `/comprar`. Se ganan monedas también chateando |
 | 🎙️ **Voz 24/7** | `/entrar` (entra a tu canal **silenciado y ensordecido** y se queda siempre; si algo lo saca, vuelve solo), `/salir` |
 | 🔊 **Canales de voz temporales** | Entrás a un canal "lobby" y se crea uno propio que se borra solo al quedar vacío (`/config tempvoice`) |
@@ -75,6 +78,40 @@ El `.gitignore` evita que se suban el `.env` (tokens) y la base de datos. **Nunc
 Si el modo presencia no te funciona, podés volver a la conexión de voz completa cargando la variable
 `VOICE_MODE=real` en el hosting (por defecto es `presence`).
 
+## Panel web (opcional)
+
+Una página integrada al bot, con el mismo saldo y las mismas reglas que en Discord:
+
+- **Inicio:** saldo, `/daily` y `/trabajar` con cuenta regresiva, nivel/XP, mensajes, horas en voz, puestos y tus números del casino.
+- **Juegos:** ruleta (tablero con fichas y rueda animada), blackjack (cartas 3D, mazo, fichas) y tragamonedas (carretes, palanca y tabla de pagos), todos con **sonido** (se sintetiza en el navegador, sin archivos) y efectos de confeti y monedas.
+- **Logros:** 21 medallas (bronce, plata y oro), gráfico de tu evolución en el casino e historial de jugadas.
+- **Enviar monedas** a otra persona (mismas reglas que `/pay`), tienda de roles y rankings.
+- Botón de sonido en la barra superior (silencio y volumen, se recuerda por navegador).
+
+Se activa sola cuando cargás las variables.
+
+1. **Developer Portal** (discord.com/developers) → tu aplicación → **OAuth2**:
+   - Copiá el **Client Secret** (si no lo ves, "Reset Secret") y cargalo en el hosting como `DISCORD_CLIENT_SECRET`.
+   - En **Redirects** agregá `https://TU-DIRECCION/auth/callback` (tiene que ser idéntica a `WEB_BASE_URL` + `/auth/callback`).
+2. Variables de entorno en el hosting:
+
+   | Variable | Para qué |
+   | --- | --- |
+   | `DISCORD_CLIENT_SECRET` | Client Secret de la app (obligatoria; sin esto el panel queda apagado y el bot funciona igual) |
+   | `WEB_BASE_URL` | Dirección pública del panel, ej. `https://panel.midominio.com` o `http://123.45.67.89:25565` |
+   | `WEB_PORT` | Puerto donde escucha. Si no está, usa `SERVER_PORT` (Pterodactyl), `PORT` o `8080` |
+   | `SESSION_SECRET` | (opcional) clave para firmar las sesiones; si falta se deriva del token del bot |
+
+3. Reiniciá el bot. En el log tiene que aparecer `Panel web escuchando en ...` y `Redirect URI para el Developer Portal: ...`.
+4. En Discord usá **`/panel`** y tocá el botón, o entrá directo a la dirección.
+
+Notas:
+- Tu hosting tiene que **exponer un puerto/URL público** hacia el bot (no todos los planes gratuitos lo permiten).
+- Para HTTPS usá un dominio con proxy (Cloudflare, Nginx, Caddy) o un túnel (Cloudflare Tunnel).
+- Las sesiones duran 3 días y se firman con HMAC; las acciones que mueven monedas se validan siempre en el servidor.
+- Si el bot se reinicia con una mano de blackjack abierta, la apuesta se devuelve al volver.
+- Las constantes (recompensas, apuestas mínimas y máximas, cooldowns) se toman de los mismos archivos que los comandos.
+
 ## Configuración rápida de extras
 
 - **Logs:** `/config logs #canal`
@@ -88,6 +125,7 @@ Si el modo presencia no te funciona, podés volver a la conexión de voz complet
 - **XP, cooldown y mínimo de personas para XP de voz:** arriba de `cogs/levels.py`.
 - **Monedas (recompensas, apuestas, cooldowns):** arriba de `cogs/economy.py`.
 - **Blackjack (apuesta mínima/máxima, mazos, velocidad del dealer):** arriba de `cogs/blackjack.py`.
+- **Ruleta (apuesta mínima/máxima, tiempo de la mesa, apuestas por persona):** arriba de `cogs/roulette.py`.
 - **Límite de warns y duración del timeout automático:** arriba de `cogs/warns.py`.
 - **Color y nombre de los embeds:** `utils/embeds.py`.
 - **Personalidad de la IA:** variable `GEMINI_SYSTEM_PROMPT`.
@@ -96,8 +134,10 @@ Si el modo presencia no te funciona, podés volver a la conexión de voz complet
 
 ```
 main.py            ← arranque
-cogs/              ← módulos (levels, ai, match, economy, voice247, tempvoice, warns, config, moderation, tickets, giveaways, utility)
-utils/             ← base de datos (SQLite), embeds y fuentes
+cogs/              ← módulos (levels, ai, match, economy, blackjack, roulette, voice247, tempvoice, warns, config, moderation, tickets, giveaways, utility)
+utils/             ← base de datos (SQLite), embeds, fuentes y lógica de la ruleta
+COFRES.md          ← guía del sistema de cofres (probabilidades, precios, configuración)
+web/               ← panel web (servidor aiohttp, API y la página en web/static/)
 assets/fonts/      ← fuente para las imágenes (soporta tildes y ñ)
 data/              ← acá se guarda dilu.db (no la borres si querés conservar niveles y monedas)
 ```
