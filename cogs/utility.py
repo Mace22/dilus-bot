@@ -35,6 +35,7 @@ class Utility(commands.Cog):
             value="`/entrar` entro a tu canal, silenciado • `/salir`\nCanales temporales: `/config tempvoice`",
             inline=False,
         )
+        embed.add_field(name="📦 Cofres", value="`/cofre info` `/cofre abrir` `/cofre inventario` `/cofre comprar` `/cofre abrir_comprado` `/cofre ranking` `/cofre probabilidades`\nAdmin: `/cofreadmin estadisticas|precio|escala|reiniciar_racha`", inline=False)
         embed.add_field(name="🌐 Panel web", value="`/panel` tu economía, stats, ruleta y blackjack desde el navegador", inline=False)
         embed.add_field(name="🎁 Comunidad", value="`/sorteo crear|terminar` • `/ticket panel`", inline=False)
         embed.add_field(

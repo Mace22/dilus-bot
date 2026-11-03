@@ -77,6 +77,7 @@ class Web(commands.Cog):
             "• 🪙 Ver tu saldo y reclamar **/daily** y **/trabajar**\n"
             "• 📊 Mirar tu nivel, XP, horas en voz y puestos\n"
             "• 🎡 Jugar a la **ruleta**, 🃏 al **blackjack** y 🎰 a los **slots**, con sonido\n"
+            "• 🎁 Abrir tu **cofre diario** con ruleta y comprar cofres\n"
             "• 🏅 Ver tus **logros** y 💸 **enviar monedas**\n"
             "• 🛒 Comprar roles de la tienda y ver los rankings",
         )
