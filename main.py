@@ -29,6 +29,7 @@ EXTENSIONS = [
     "cogs.economy",
     "cogs.blackjack",
     "cogs.roulette",
+    "cogs.chests",
     "cogs.web",
     "cogs.warns",
     "cogs.tempvoice",
