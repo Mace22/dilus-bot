@@ -36,6 +36,7 @@ const ICONS = {
   wheel: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/>',
   cards: '<rect x="3" y="4" width="13" height="17" rx="2"/><path d="M8 2h11a2 2 0 0 1 2 2v14"/><path d="M9.5 10.5c.8-1.5 3-1.2 3 .5 0 1.5-3 3-3 3s-3-1.5-3-3c0-1.7 2.2-2 3-.5z"/>',
   palette: '<circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16c3.3 0 6-2.7 6-6 0-4.9-4.5-9-10-9z"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',
   bag: '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
   trophy: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
   gift: '<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
@@ -212,6 +213,7 @@ const NAV = [
   { id: "tags", label: "Tags", icon: "palette" },
   { id: "ranking", label: "Ranking", icon: "trophy" },
   { id: "logros", label: "Logros", icon: "star" },
+  { id: "admin", label: "Admin", icon: "shield", admin: true },
 ];
 
 function guildIcon(g) {
@@ -219,7 +221,7 @@ function guildIcon(g) {
 }
 
 function renderShell() {
-  const nav = h("nav", { class: "nav" }, NAV.map(n => h("a", { href: `#/${n.id}`, dataset: { id: n.id } }, icon(n.icon), h("span", { text: n.label }))));
+  const nav = h("nav", { class: "nav" }, NAV.filter(n => !n.admin || S.profile.is_admin).map(n => h("a", { href: `#/${n.id}`, dataset: { id: n.id } }, icon(n.icon), h("span", { text: n.label }))));
   const side = h("aside", { class: "side" },
     h("div", { class: "brand" }, h("div", { class: "logo", text: "D" }), h("div", {}, h("b", { text: "Dilu's Bot" }), h("small", { text: "Panel web" }))),
     nav, h("div", { class: "side-foot", text: "Todo lo que ves acá es el mismo saldo y las mismas reglas que en Discord." }));

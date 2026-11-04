@@ -16,6 +16,7 @@ from cogs.tags import TagError
 from cogs.roulette import MAX_BET as RL_MAX_BET
 from cogs.roulette import MIN_BET as RL_MIN_BET
 from utils import roulette as rl
+from web.admin import Admin
 from web.common import ApiError
 
 log = logging.getLogger("dilus-bot.web")
@@ -34,6 +35,7 @@ class Services:
         self._own_history: dict[int, deque] = {}
         self._locks: dict[tuple[int, int], asyncio.Lock] = defaultdict(asyncio.Lock)
         self._who: dict[int, tuple[float, tuple[str, str | None]]] = {}
+        self.admin = Admin(self)
 
     # ------------------------------------------------------------------
     # Utilidades
@@ -129,6 +131,7 @@ class Services:
 
         return {
             "now": now,
+            "is_admin": await self.admin.is_admin(gid, uid),
             "balance": bal,
             "eco_rank": rank,
             "level": {

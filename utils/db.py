@@ -82,6 +82,22 @@ CREATE TABLE IF NOT EXISTS tag_owned (
     PRIMARY KEY (guild_id, user_id, tag)
 );
 
+-- Registro de acciones de administración (panel web y comandos)
+CREATE TABLE IF NOT EXISTS admin_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    actor_id INTEGER NOT NULL,
+    actor_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_id INTEGER,
+    target_name TEXT,
+    amount INTEGER,
+    detail TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'discord',
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_log_guild ON admin_log (guild_id, id);
+
 CREATE TABLE IF NOT EXISTS warns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id INTEGER NOT NULL,

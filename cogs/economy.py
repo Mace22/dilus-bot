@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from utils import adminlog
 from utils.embeds import error, make_embed, ok
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
@@ -279,6 +280,11 @@ class Economy(commands.Cog):
     async def eco_dar(self, interaction: discord.Interaction, miembro: discord.Member, cantidad: int):
         if not await self.add(interaction.guild_id, miembro.id, cantidad):
             return await interaction.response.send_message(embed=error("Esa persona no tiene tantas monedas para restar."), ephemeral=True)
+        if cantidad:
+            await adminlog.record(
+                self.bot, interaction.guild, actor=interaction.user, action="coins_give" if cantidad > 0 else "coins_take",
+                target=miembro, amount=cantidad, source="discord",
+            )
         await interaction.response.send_message(
             embed=ok(f"{miembro.mention}: {cantidad:+d} {COIN}"), allowed_mentions=discord.AllowedMentions.none()
         )
@@ -295,6 +301,7 @@ class Economy(commands.Cog):
             "ON CONFLICT(guild_id, role_id) DO UPDATE SET price = excluded.price",
             (interaction.guild_id, rol.id, precio),
         )
+        await adminlog.record(self.bot, interaction.guild, actor=interaction.user, action="shop_add", detail=f"Rol: {rol.name} a {fmt(precio)} monedas", source="discord")
         await interaction.response.send_message(
             embed=ok(f"{rol.mention} ahora se vende a **{fmt(precio)}** {COIN}."),
             allowed_mentions=discord.AllowedMentions.none(),
@@ -304,6 +311,7 @@ class Economy(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def shop_remove(self, interaction: discord.Interaction, rol: discord.Role):
         await self.bot.db.execute("DELETE FROM shop WHERE guild_id = ? AND role_id = ?", (interaction.guild_id, rol.id))
+        await adminlog.record(self.bot, interaction.guild, actor=interaction.user, action="shop_remove", detail=f"Rol: {rol.name}", source="discord")
         await interaction.response.send_message(embed=ok(f"Saqué {rol.mention} de la tienda."), allowed_mentions=discord.AllowedMentions.none())
 
 
