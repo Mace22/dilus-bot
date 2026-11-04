@@ -8,6 +8,7 @@ La apuesta del retador queda en custodia apenas crea el duelo; se le devuelve si
 no responde a tiempo, o si el bot se reinicia con duelos abiertos.
 """
 import asyncio
+import io
 import logging
 import random
 import time
@@ -18,6 +19,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from cogs.economy import COIN, MAX_BET, MIN_BET, fmt
+from utils import coin_anim
 from utils.embeds import error, make_embed
 
 log = logging.getLogger("dilus-bot.duels")
@@ -68,6 +70,7 @@ class Duels(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.msgs: dict[int, discord.Message] = {}      # mensaje de Discord de cada duelo abierto
+        self._tasks: set[asyncio.Task] = set()          # animaciones en curso
         self._locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     @property
@@ -87,6 +90,8 @@ class Duels(commands.Cog):
 
     async def cog_unload(self):
         self.sweeper.cancel()
+        for t in list(self._tasks):
+            t.cancel()
 
     # ------------------------------------------------------------------
     # Reinicios y vencimientos
@@ -161,10 +166,38 @@ class Duels(commands.Cog):
         msg = self.msgs.pop(row["id"], None)
         if msg is None:
             return
+        if row["status"] == "done":              # la moneda se tira con animación (sin frenar a quien aceptó)
+            task = asyncio.create_task(self._animate(msg, row))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+            return
         try:
             await msg.edit(content=None, embed=self.final_embed(row), view=None)
         except discord.HTTPException:
             pass
+
+    async def _animate(self, msg: discord.Message, row):
+        """1) la moneda girando en el aire (GIF)  2) el resultado con la moneda quieta del lado que salió."""
+        try:
+            gif, png = await asyncio.to_thread(coin_anim.render, row["result"])
+            air = make_embed(
+                "🪙 ¡La moneda está en el aire!",
+                f"🔸 **{row['challenger_name']}** → **{row['side']}**\n🔹 **{row['opponent_name']}** → **{OTHER[row['side']]}**\n\n"
+                f"Pozo: **{fmt(row['bet'] * 2)}** {COIN}",
+                color=GOLD,
+            )
+            air.set_image(url="attachment://moneda.gif")
+            await msg.edit(content=None, embed=air, attachments=[discord.File(io.BytesIO(gif), "moneda.gif")], view=None)
+            await asyncio.sleep(3.4)
+            final = self.final_embed(row)
+            final.set_image(url="attachment://moneda.png")
+            await msg.edit(embed=final, attachments=[discord.File(io.BytesIO(png), "moneda.png")], view=None)
+        except Exception:
+            log.exception("No pude animar el duelo %s", row["id"])
+            try:
+                await msg.edit(content=None, embed=self.final_embed(row), attachments=[], view=None)
+            except discord.HTTPException:
+                pass
 
     async def announce(self, row, *, channel: discord.abc.Messageable | None = None, opponent: discord.abc.User | None = None) -> bool:
         """Publica el desafío con botones en un canal, o por mensaje privado al desafiado (si se creó desde el panel)."""

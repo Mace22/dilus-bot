@@ -661,3 +661,19 @@ select.txt option { background: #13131d; color: var(--text); }
 .duel-main { flex: 1; min-width: 0; } .duel-main small { display: block; color: var(--faint); }
 .duel-btns { display: flex; gap: 8px; flex: none; }
 @media (max-width: 900px) { .duel-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- animación del duelo ---------- */
+.duel-modal { width: min(560px, 100%); text-align: center; }
+.duel-modal h3 { margin-bottom: 14px; }
+.duel-overlay.out { opacity: 0; transition: opacity .2s; }
+.da-vs { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.da-x { font: 800 22px var(--display); color: var(--faint); }
+.da-player { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border-radius: 16px; background: var(--card); border: 2px solid var(--line); transition: .4s; min-width: 0; }
+.da-player b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.da-player small { color: var(--muted); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.da-face { font-size: 30px; line-height: 1; }
+.da-player.winner { border-color: var(--gold); background: rgba(232,195,90,.16); box-shadow: 0 0 30px rgba(232,195,90,.45); transform: scale(1.06); }
+.da-player.loser { opacity: .45; filter: grayscale(.6); }
+.duel-modal .coin-stage { height: 250px; margin-top: 4px; }
+.duel-modal .coin-led { margin-top: 0; }
+.da-close { margin-top: 6px; }

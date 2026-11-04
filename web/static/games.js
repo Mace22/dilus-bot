@@ -820,29 +820,31 @@ async function caracruzDuel(root, token) {
   /* --- listas --- */
   const incomingBox = h("div"), outgoingBox = h("div"), recentBox = h("div");
   const left = ts => { const s = Math.max(0, Math.round(ts - now())); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-  async function act(path, id, ok) {
+  async function act(path, id, ok, duel) {
     try {
-      const r = await gpost(path, { id }); st.seen && st.seen.add(id); setBalance(r.balance);
+      const r = await gpost(path, { id }); st.seen && st.seen.add(id);
       if (r.result) {
-        r.won ? (Sfx.win(false), Fx.at($(".bal-chip"), "coins", 14)) : Sfx.lose();
+        st.animating = true;
+        await playDuelAnim({ ...duel, status: "done", result: r.result, winner_id: r.winner_id }, me);    // el saldo se actualiza al terminar la animación
+        st.animating = false; setBalance(r.balance);
         toast(r.won ? `¡Salió ${r.result} y ganaste ${fmt(r.bet)} monedas! 🏆` : `Salió ${r.result}… perdiste ${fmt(r.bet)} monedas`, r.won ? "gold" : "err");
-      } else toast(ok, "ok");
-    } catch (e) { toast(e.message, "err"); }
+      } else { setBalance(r.balance); toast(ok, "ok"); }
+    } catch (e) { st.animating = false; toast(e.message, "err"); }
     refresh();
   }
   function paint(d) {
-    incomingBox.replaceChildren(d.incoming.length ? h("div", { class: "card" }, h("h3", { text: "⚔️ Te desafiaron" }), d.incoming.map(x => h("div", { class: "duel-row" },
+    incomingBox.replaceChildren(...(d.incoming.length ? [h("div", { class: "card" }, h("h3", { text: "⚔️ Te desafiaron" }), d.incoming.map(x => h("div", { class: "duel-row" },
       h("div", { class: "duel-main" }, h("b", { text: x.challenger }), ` te desafía por ${fmt(x.bet)} 🪙`,
         h("small", { text: `Eligió ${x.side} · vos te quedás con ${OTHER[x.side]} · ganás ${fmt(x.bet * 2)} · vence en ${left(x.expires)}` })),
       h("div", { class: "duel-btns" },
         h("button", { class: "btn btn-primary btn-sm", disabled: x.bet > S.profile.balance, title: x.bet > S.profile.balance ? "No te alcanza el saldo" : "", text: "Aceptar", onclick: async () => {
-          if (await confirmBox({ title: `Aceptar el duelo de ${x.challenger}`, text: `Ponés ${fmt(x.bet)} monedas. Si sale ${OTHER[x.side]} ganás ${fmt(x.bet * 2)}; si sale ${x.side}, las perdés.`, ok: "Aceptar" })) act("/api/duel/accept", x.id); } }),
-        h("button", { class: "btn btn-ghost btn-sm", text: "Rechazar", onclick: () => act("/api/duel/decline", x.id, "Rechazaste el duelo") })))))
-      : null);
-    outgoingBox.replaceChildren(d.outgoing.length ? h("div", { class: "card" }, h("h3", { text: "⏳ Esperando respuesta" }), d.outgoing.map(x => h("div", { class: "duel-row" },
+          if (await confirmBox({ title: `Aceptar el duelo de ${x.challenger}`, text: `Ponés ${fmt(x.bet)} monedas. Si sale ${OTHER[x.side]} ganás ${fmt(x.bet * 2)}; si sale ${x.side}, las perdés.`, ok: "Aceptar" })) act("/api/duel/accept", x.id, null, x); } }),
+        h("button", { class: "btn btn-ghost btn-sm", text: "Rechazar", onclick: () => act("/api/duel/decline", x.id, "Rechazaste el duelo") })))))]
+      : []));
+    outgoingBox.replaceChildren(...(d.outgoing.length ? [h("div", { class: "card" }, h("h3", { text: "⏳ Esperando respuesta" }), d.outgoing.map(x => h("div", { class: "duel-row" },
       h("div", { class: "duel-main" }, "Desafiaste a ", h("b", { text: x.opponent }), ` por ${fmt(x.bet)} 🪙`, h("small", { text: `Elegiste ${x.side} · vence en ${left(x.expires)}` })),
-      h("div", { class: "duel-btns" }, h("button", { class: "btn btn-ghost btn-sm", text: "Cancelar", onclick: () => act("/api/duel/cancel", x.id, "Desafío cancelado, te devolví la apuesta") })))))
-      : null);
+      h("div", { class: "duel-btns" }, h("button", { class: "btn btn-ghost btn-sm", text: "Cancelar", onclick: () => act("/api/duel/cancel", x.id, "Desafío cancelado, te devolví la apuesta") })))))]
+      : []));
     recentBox.replaceChildren(h("div", { class: "card" }, h("h3", { text: "Últimos duelos" }), d.recent.length ? d.recent.map(x => {
       const mineC = x.challenger_id === me, other = mineC ? x.opponent : x.challenger;
       if (x.status !== "done") return h("div", { class: "duel-row" }, h("div", { class: "duel-main" }, h("span", { class: "note", text: mineC ? `${other} ${DUEL_END[x.status] || "no respondió"} · apuesta devuelta` : `Duelo de ${other}: ${x.status === "declined" ? "lo rechazaste" : x.status === "cancelled" ? "lo canceló" : "venció"}` })));
@@ -852,17 +854,25 @@ async function caracruzDuel(root, token) {
     }) : h("p", { class: "note", text: "Todavía no jugaste ningún duelo." })));
   }
   async function refresh() {
-    const d = await gget("/api/duel/list");
-    if (!alive(token)) return;
-    if (d.balance !== S.profile.balance) setBalance(d.balance);
-    const first = st.seen === null; if (first) st.seen = new Set();
-    for (const x of d.recent) {                                      // avisos de lo que pasó mientras mirabas otra cosa
-      if (st.seen.has(x.id)) continue; st.seen.add(x.id);
-      if (first || x.challenger_id !== me) continue;                  // lo que me toca a mí como retador
-      if (x.status === "done") { const won = x.winner_id === me; won ? Sfx.win(false) : Sfx.lose(); toast(won ? `¡Salió ${x.result} y le ganaste a ${x.opponent}! +${fmt(x.bet)} 🏆` : `Salió ${x.result}… perdiste contra ${x.opponent} (−${fmt(x.bet)})`, won ? "gold" : "err"); }
-      else toast(`${x.opponent} ${DUEL_END[x.status] || "no respondió"}. Te devolví la apuesta.`, "ok");
-    }
-    paint(d);
+    if (st.animating || st.refreshing) return;
+    st.refreshing = true;
+    try {
+      const d = await gget("/api/duel/list");
+      if (!alive(token)) return;
+      const first = st.seen === null; if (first) st.seen = new Set();
+      for (const x of d.recent) {                                    // avisos de lo que pasó mientras mirabas otra cosa
+        if (st.seen.has(x.id)) continue; st.seen.add(x.id);
+        if (first || x.challenger_id !== me) continue;                // lo que me toca a mí como retador
+        if (x.status === "done") {
+          st.animating = true; await playDuelAnim(x, me); st.animating = false;
+          const won = x.winner_id === me;
+          toast(won ? `¡Salió ${x.result} y le ganaste a ${x.opponent}! +${fmt(x.bet)} 🏆` : `Salió ${x.result}… perdiste contra ${x.opponent} (−${fmt(x.bet)})`, won ? "gold" : "err");
+        } else toast(`${x.opponent} ${DUEL_END[x.status] || "no respondió"}. Te devolví la apuesta.`, "ok");
+      }
+      if (!alive(token)) return;
+      if (d.balance !== S.profile.balance) setBalance(d.balance);
+      paint(d);
+    } finally { st.animating = false; st.refreshing = false; }
   }
 
   relabel();
@@ -878,4 +888,54 @@ async function caracruzDuel(root, token) {
   await refresh();
   S.duelTimer = setInterval(() => { refresh().catch(() => {}); }, 3000);
   S.cleanups.push(() => clearInterval(S.duelTimer));
+}
+
+
+/* ---------- animación del duelo: la moneda se tira en pantalla ---------- */
+function playDuelAnim(x, me) {
+  return new Promise(resolve => {
+    const FACE = { cara: "😎", cruz: "✖" }, OTHER = { cara: "cruz", cruz: "cara" }, cap = s => s[0].toUpperCase() + s.slice(1);
+    const sideOf = id => (id === x.challenger_id ? x.side : OTHER[x.side]);
+    const winnerId = x.winner_id, iWon = winnerId === me, iPlay = x.challenger_id === me || x.opponent_id === me;
+    const player = (name, id) => h("div", { class: "da-player", dataset: { id } },
+      h("div", { class: "da-face", text: FACE[sideOf(id)] }), h("b", { text: id === me ? `${name} (vos)` : name }), h("small", { text: cap(sideOf(id)) }));
+    const pA = player(x.challenger, x.challenger_id), pB = player(x.opponent, x.opponent_id);
+    const coin = h("div", { class: "coin3d" },
+      h("div", { class: "coin-face front" }, h("span", { text: FACE.cara }), h("small", { text: "CARA" })),
+      h("div", { class: "coin-face back" }, h("span", { text: FACE.cruz }), h("small", { text: "CRUZ" })));
+    const toss = h("div", { class: "coin-toss" }, coin);
+    const stage = h("div", { class: "coin-stage" }, toss, h("div", { class: "coin-shadow" }));
+    const status = h("div", { class: "led coin-led", text: "¡La moneda está en el aire!" });
+    let closed = false;
+    const close = () => { if (closed) return; closed = true; ov.classList.add("out"); document.removeEventListener("keydown", onKey); setTimeout(() => ov.remove(), 220); resolve(); };
+    const onKey = e => { if (e.key === "Escape" || e.key === "Enter") close(); };
+    const ov = h("div", { class: "overlay duel-overlay", onclick: e => e.target === ov && closed === false && done && close() },
+      h("div", { class: "modal duel-modal", role: "dialog", "aria-label": "Duelo de cara o cruz" },
+        h("h3", { text: "⚔️ Duelo de cara o cruz" }),
+        h("div", { class: "da-vs" }, pA, h("span", { class: "da-x", text: "VS" }), pB),
+        stage, status, h("p", { class: "note", text: `Pozo: ${fmt(x.bet * 2)} 🪙` }),
+        h("button", { class: "btn btn-ghost btn-sm da-close", text: "Cerrar", onclick: close })));
+    let done = false;
+    document.body.append(ov); document.addEventListener("keydown", onKey);
+
+    const turns = 6 + Math.floor(Math.random() * 3), target = turns * 360 + (x.result === "cara" ? 0 : 180), dur = 2600;
+    Sfx.spinStart();
+    const spin = coin.animate([{ transform: "rotateY(0deg)" }, { transform: `rotateY(${target}deg)` }], { duration: dur, easing: "cubic-bezier(.15,.65,.2,1)", fill: "forwards" });
+    const up = toss.animate([{ transform: "translateY(0) scale(1)" }, { transform: "translateY(-105px) scale(1.15)", offset: 0.5 }, { transform: "translateY(0) scale(1)" }], { duration: dur, easing: "ease-in-out" });
+    Promise.all([spin.finished, up.finished].map(p => p.catch(() => {}))).then(() => {
+      if (closed) return;
+      coin.style.transform = `rotateY(${target % 360}deg)`; spin.cancel();
+      toss.animate([{ transform: "translateY(6px) scaleY(.95)" }, { transform: "none" }], { duration: 240, easing: "ease-out" });
+      done = true; status.textContent = `Salió ${x.result.toUpperCase()}`;
+      setTimeout(() => {
+        if (closed) return;
+        const w = winnerId === x.challenger_id ? pA : pB, l = w === pA ? pB : pA;
+        w.classList.add("winner"); l.classList.add("loser");
+        status.textContent = `🏆 Gana ${winnerId === x.challenger_id ? x.challenger : x.opponent} · +${fmt(x.bet * 2)}`;
+        stage.classList.add(iWon ? "win" : "lose");
+        if (iPlay) { iWon ? (Sfx.win(x.bet >= 5000), Fx.at(stage, "confetti", 120, 1.2)) : Sfx.lose(); }
+      }, 650);
+      setTimeout(close, 6500);
+    });
+  });
 }
