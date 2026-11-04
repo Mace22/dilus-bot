@@ -35,6 +35,7 @@ const ICONS = {
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
   wheel: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/>',
   cards: '<rect x="3" y="4" width="13" height="17" rx="2"/><path d="M8 2h11a2 2 0 0 1 2 2v14"/><path d="M9.5 10.5c.8-1.5 3-1.2 3 .5 0 1.5-3 3-3 3s-3-1.5-3-3c0-1.7 2.2-2 3-.5z"/>',
+  palette: '<circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16c3.3 0 6-2.7 6-6 0-4.9-4.5-9-10-9z"/>',
   bag: '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
   trophy: '<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>',
   gift: '<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
@@ -52,7 +53,6 @@ Object.assign(ICONS, {
   volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
   volumeOff: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
   send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
-  chest: '<path d="M3 11h18v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 11V8a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v3"/><rect x="10" y="12" width="4" height="4" rx="1"/>',
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -208,8 +208,8 @@ const NAV = [
   { id: "ruleta", label: "Ruleta", icon: "wheel" },
   { id: "blackjack", label: "Blackjack", icon: "cards" },
   { id: "slots", label: "Slots", icon: "slots" },
-  { id: "cofres", label: "Cofres", icon: "chest" },
   { id: "tienda", label: "Tienda", icon: "bag" },
+  { id: "tags", label: "Tags", icon: "palette" },
   { id: "ranking", label: "Ranking", icon: "trophy" },
   { id: "logros", label: "Logros", icon: "star" },
 ];
@@ -286,7 +286,6 @@ function route() {
   S.cleanups.splice(0).forEach(fn => { try { fn(); } catch { /* ya no existe */ } });
   const token = ++S.routeToken;
   document.querySelectorAll(".nav a").forEach(a => a.classList.toggle("on", a.dataset.id === name));
-  const active = $(".nav a.on"); if (active && active.scrollIntoView) active.scrollIntoView({ inline: "center", block: "nearest" });
   const view = $("#view");
   if (!view) return;
   view.replaceChildren(h("div", { class: "grid g3" }, [1, 2, 3].map(() => h("div", { class: "skeleton", style: { height: "150px" } }))));
@@ -337,9 +336,6 @@ VIEWS.inicio = async (root, token) => {
   if (!alive(token)) return;
   setBalance(S.profile.balance, false);
   const p = S.profile, lv = p.level, d = p.daily;
-  let chestSt = null;
-  try { chestSt = await gget("/api/chests"); } catch { /* los cofres pueden estar desactivados */ }
-  if (!alive(token)) return;
 
   /* encabezado */
   const hero = h("section", { class: "card hero" },
@@ -416,14 +412,13 @@ VIEWS.inicio = async (root, token) => {
 
   root.replaceChildren(hero,
     h("div", { class: "sec-title" }, h("h2", { text: "Recompensas" }), h("span", { text: "Reclamalas desde acá o con /daily y /trabajar" })),
-    h("div", { class: chestSt ? "grid g3" : "grid g2" }, daily, work, chestSt ? chestTeaser(chestSt) : null),
+    h("div", { class: "grid g2" }, daily, work),
     h("div", { class: "sec-title" }, h("h2", { text: "Tus estadísticas" }), h("span", { text: "Salen de tu actividad en Discord" })),
     h("div", { class: "grid g2 split-a" }, levelCard, stats),
     h("div", { class: "sec-title" }, h("h2", { text: "Casino" })),
     h("div", { class: "grid g2" }, casinoCard("roulette", "Ruleta", "🎡"), casinoCard("blackjack", "Blackjack", "🃏")),
     h("div", { class: "sec-title" }, h("h2", { text: "Jugá ahora" })),
-    h("div", { class: chestSt ? "grid g2" : "grid g3" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15"),
-      chestSt ? play("cofres", "🎁", "Cofres", "Racha diaria y cofres comprables") : null));
+    h("div", { class: "grid g3" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15")));
   root.querySelectorAll("[data-count]").forEach(el => countUp(el, +el.dataset.count));
   if (!S.intro) { S.intro = true; shownBal = 0; setBalance(S.profile.balance); }
 };

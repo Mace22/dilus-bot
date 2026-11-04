@@ -11,11 +11,10 @@ THROTTLE = {
     "/api/claim/daily": 1.0,
     "/api/claim/work": 1.0,
     "/api/shop/buy": 1.0,
+    "/api/tags/buy": 1.0,
+    "/api/tags/equip": 1.0,
     "/api/slots/spin": 1.0,
     "/api/pay": 1.5,
-    "/api/chests/claim": 1.0,
-    "/api/chests/open": 1.0,
-    "/api/chests/buy": 0.8,
 }
 
 
@@ -37,6 +36,9 @@ class Api:
             ("POST", "/api/claim/work"): lambda g, u, q, b: self.svc.claim_work(g, u),
             ("GET", "/api/shop"): lambda g, u, q, b: self.svc.shop(g, u),
             ("POST", "/api/shop/buy"): lambda g, u, q, b: self.svc.buy(g, u, b.get("role")),
+            ("GET", "/api/tags"): lambda g, u, q, b: self.svc.tags(g, u),
+            ("POST", "/api/tags/buy"): lambda g, u, q, b: self.svc.tag_buy(g, u, b.get("tag")),
+            ("POST", "/api/tags/equip"): lambda g, u, q, b: self.svc.tag_equip(g, u, b.get("tag")),
             ("GET", "/api/leaderboard"): lambda g, u, q, b: self.svc.leaderboard(g, u, q.get("type", "eco")),
             ("GET", "/api/blackjack"): lambda g, u, q, b: self.svc.bj_state(g, u),
             ("POST", "/api/blackjack/deal"): lambda g, u, q, b: self.svc.bj_deal(g, u, b.get("bet")),
@@ -48,10 +50,6 @@ class Api:
             ("GET", "/api/achievements"): lambda g, u, q, b: self.svc.achievements(g, u),
             ("GET", "/api/members"): lambda g, u, q, b: self.svc.members(g, u, q.get("q")),
             ("POST", "/api/pay"): lambda g, u, q, b: self.svc.pay(g, u, b.get("target"), b.get("amount")),
-            ("GET", "/api/chests"): lambda g, u, q, b: self.svc.chests_state(g, u),
-            ("POST", "/api/chests/claim"): lambda g, u, q, b: self.svc.chests_claim(g, u, b.get("request_id")),
-            ("POST", "/api/chests/open"): lambda g, u, q, b: self.svc.chests_open(g, u, b.get("rarity"), b.get("request_id")),
-            ("POST", "/api/chests/buy"): lambda g, u, q, b: self.svc.chests_buy(g, u, b.get("rarity"), b.get("qty", 1), b.get("request_id")),
         }
 
     def throttle(self, uid: int, path: str):

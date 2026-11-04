@@ -162,3 +162,49 @@ function openPay() {
   document.addEventListener("keydown", onKey);
   search.focus();
 }
+
+
+/* ============================================================
+   TAGS DE COLORES
+   ============================================================ */
+VIEWS.tags = async (root, token) => {
+  const data = await gget("/api/tags");
+  if (!alive(token)) return;
+  setBalance(data.balance, false);
+  const reload = () => VIEWS.tags(root, token);
+  const run = async (btn, path, body, msg) => {
+    btn.disabled = true;
+    try {
+      const r = await gpost(path, { ...body });
+      setBalance(r.balance);
+      toast(msg(r), "gold");
+      reload();
+    } catch (e) { toast(e.message, "err"); btn.disabled = false; }
+  };
+  const cards = data.items.map(it => {
+    const poor = !it.owned && it.price > data.balance;
+    let btn;
+    if (it.equipped) {
+      btn = h("button", { class: "btn btn-ghost", text: "Sacar tag" });
+      btn.addEventListener("click", () => run(btn, "/api/tags/equip", { tag: null }, () => "Te saqué el tag."));
+    } else if (it.owned) {
+      btn = h("button", { class: "btn btn-primary", text: "Usar" });
+      btn.addEventListener("click", () => run(btn, "/api/tags/equip", { tag: it.key }, () => `Ahora llevás el tag ${it.name} ${it.emoji}`));
+    } else {
+      btn = h("button", { class: "btn btn-primary", disabled: poor, text: poor ? "Saldo insuficiente" : "Comprar" });
+      btn.addEventListener("click", async () => {
+        if (!await confirmBox({ title: `Comprar tag ${it.name}`, text: `Se descontarán ${fmt(it.price)} monedas y el bot te va a dar el rol de color en Discord. Es tuyo para siempre: después podés cambiar de color gratis.`, ok: "Comprar" })) return;
+        run(btn, "/api/tags/buy", { tag: it.key }, () => `¡Tag ${it.name} comprado! ${it.emoji}`);
+      });
+    }
+    const glow = it.key === "negro" ? "#8a8a9c" : it.color;      // el negro puro no se ve sobre fondo oscuro
+    const status = it.equipped ? h("span", { class: "tag-state on", text: "Puesto" }) : it.owned ? h("span", { class: "tag-state", text: "Comprado" }) : null;
+    return h("div", { class: `card shop-card tag-card ${it.equipped ? "worn" : ""}`, style: { "--rc": glow } },
+      h("div", { class: "role-name" }, h("i", { class: "swatch", style: { background: it.color } }), h("span", { text: `Tag ${it.name}` }), status),
+      h("div", { class: "tag-preview" }, h("span", { style: { color: it.key === "negro" ? "#fff" : it.color, textShadow: it.key === "negro" ? "0 0 0 #000" : "none" }, class: it.key === "negro" ? "name-black" : "", text: S.user.name })),
+      it.owned ? h("div", { class: "note", text: "Ya es tuyo" }) : h("div", { class: "price" }, coinIcon(), fmt(it.price)), btn);
+  });
+  root.replaceChildren(
+    sectionTitle("Tags de colores", "Comprá un tag y el bot te da un rol con ese color en Discord. Una vez comprado, cambiás entre tus tags gratis."),
+    h("div", { class: "grid g3" }, cards));
+};

@@ -599,3 +599,11 @@ body { font-variant-numeric: tabular-nums; }
   .reels { --sym: 74px; gap: 6px; padding: 6px; } .reels-frame { gap: 6px; } .lever { width: 28px; } .led { font-size: 15px; }
   .ach { padding: 12px; } .ach-ic { width: 46px; height: 46px; font-size: 24px; }
 }
+
+/* ---------- tags de colores ---------- */
+.swatch { box-shadow: 0 0 0 2px rgba(255,255,255,.55), 0 0 14px var(--rc, transparent) !important; }
+.tag-card.worn { outline: 2px solid var(--rc); outline-offset: -2px; }
+.tag-state { margin-left: auto; font: 600 11px var(--display, inherit); padding: 3px 9px; border-radius: 99px; background: rgba(255,255,255,.08); color: var(--muted); }
+.tag-state.on { background: rgba(34,197,94,.18); color: #4ade80; }
+.tag-preview { position: relative; z-index: 1; padding: 10px 14px; border-radius: 12px; background: #313338; font-weight: 700; }
+.tag-preview .name-black { color: #010101 !important; background: #dcdde1; padding: 2px 8px; border-radius: 6px; }
