@@ -657,7 +657,13 @@ VIEWS.slots = async (root, token) => {
 /* ============================================================
    CARA O CRUZ (mismas reglas que /apostar: acertás y duplicás)
    ============================================================ */
-VIEWS.caracruz = async (root, token) => {
+const ccTabs = (root, token, mode) => h("div", { class: "tabs" },
+  h("button", { class: mode === "casa" ? "on" : "", text: "🪙 Contra la casa", onclick: () => VIEWS.caracruz(root, token, "casa") }),
+  h("button", { class: mode === "duel" ? "on" : "", text: "⚔️ Duelo contra alguien", onclick: () => VIEWS.caracruz(root, token, "duel") }));
+
+VIEWS.caracruz = async (root, token, mode = "casa") => {
+  clearInterval(S.duelTimer);
+  if (mode === "duel") return caracruzDuel(root, token);
   const lim = S.profile.limits;
   const chipVals = CHIPS.filter(v => v >= lim.cf_min && v <= lim.cf_max);
   const st = { bet: chipVals.includes(100) ? 100 : chipVals[0], side: "cara", busy: false, rot: 0, hist: [] };
@@ -732,7 +738,7 @@ VIEWS.caracruz = async (root, token) => {
   }
 
   relabel();
-  root.replaceChildren(sectionTitle("Cara o cruz", "Mismas reglas que el comando /apostar: si acertás, duplicás lo apostado."),
+  root.replaceChildren(sectionTitle("Cara o cruz", "Mismas reglas que el comando /apostar: si acertás, duplicás lo apostado."), ccTabs(root, token, "casa"),
     h("div", { class: "card coin-card" }, stage, display, h("div", { class: "hist-label", text: "Últimos lanzamientos" }), histEl,
       h("div", { class: "side-pick" }, sideBtns),
       h("div", { class: "bj-bet slots-bet" }, h("div", { class: "row" }, chips, input, x2Btn, allinBtn), h("div", { class: "row" }, flipBtn),
@@ -742,3 +748,134 @@ VIEWS.caracruz = async (root, token) => {
       ["Qué paga", "Si acertás, recibís el doble de lo apostado (ganás lo mismo que pusiste). Si no, perdés la apuesta."],
       ["A tener en cuenta", "Cada lanzamiento es 50/50 e independiente: que haya salido cara varias veces seguidas no cambia nada. Jugá por diversión."]]));
 };
+
+
+/* ---------- Cara o cruz: duelo contra otra persona ---------- */
+const DUEL_END = { declined: "rechazó el duelo", cancelled: "canceló el duelo", expired: "no respondió a tiempo" };
+async function caracruzDuel(root, token) {
+  const lim = S.profile.limits, me = S.user.id;
+  const chipVals = CHIPS.filter(v => v >= lim.cf_min && v <= lim.cf_max);
+  const st = { bet: chipVals.includes(100) ? 100 : chipVals[0], side: "cara", target: null, busy: false, seen: null, seq: 0, timer: 0 };
+  const FACE = { cara: "😎", cruz: "✖" }, OTHER = { cara: "cruz", cruz: "cara" };
+  const cap = s => s[0].toUpperCase() + s.slice(1);
+
+  /* --- quién --- */
+  const search = h("input", { class: "txt", placeholder: "Buscá a quién desafiar…", autocomplete: "off", maxlength: "32", "aria-label": "Buscar persona" });
+  const results = h("div", { class: "pay-results" }), chosen = h("div", { class: "pay-chosen hide" });
+  const avatarOf = m => m.avatar ? h("img", { class: "avatar", src: m.avatar, alt: "" }) : h("div", { class: "avatar" });
+  function choose(m) {
+    st.target = m; results.replaceChildren(); search.value = ""; search.classList.add("hide"); chosen.classList.remove("hide");
+    chosen.replaceChildren(avatarOf(m), h("b", { text: m.name }),
+      h("button", { class: "icon-btn sm", "aria-label": "Quitar", onclick: () => { st.target = null; chosen.classList.add("hide"); search.classList.remove("hide"); relabel(); search.focus(); } }, icon("x")));
+    relabel();
+  }
+  search.addEventListener("input", () => {
+    clearTimeout(st.qt);
+    const q = search.value.trim();
+    if (!q) return results.replaceChildren();
+    st.qt = setTimeout(async () => {
+      const mine = ++st.seq;
+      try {
+        const r = await gget("/api/members", { q });
+        if (mine !== st.seq) return;
+        results.replaceChildren(...(r.members.length ? r.members.map(m => h("button", { class: "member-row", onclick: () => choose(m) }, avatarOf(m), h("span", { text: m.name })))
+          : [h("p", { class: "note", style: { padding: "8px 4px" }, text: "No encontré a nadie con ese nombre." })]));
+      } catch (e) { toast(e.message, "err"); }
+    }, 220);
+  });
+
+  /* --- lado y apuesta --- */
+  const sideBtns = ["cara", "cruz"].map(k => h("button", { class: `side-btn ${k === st.side ? "on" : ""}`, "data-silent": "1", dataset: { k },
+    onclick: () => { if (st.busy) return; st.side = k; Sfx.chip(); sideBtns.forEach(b => b.classList.toggle("on", b.dataset.k === k)); sideNote.textContent = sideText(); } },
+    h("span", { text: FACE[k] }), cap(k)));
+  const sideText = () => `Vos elegís ${st.side}. ${st.target ? st.target.name : "La otra persona"} se queda con ${OTHER[st.side]}.`;
+  const sideNote = h("p", { class: "note", text: sideText() });
+
+  const sendBtn = h("button", { class: "btn btn-gold btn-lg", "data-silent": "1", onclick: send });
+  const input = h("input", { class: "num-input", type: "number", inputmode: "numeric", min: lim.cf_min, max: lim.cf_max, value: st.bet, "aria-label": "Apuesta",
+    oninput: e => { st.bet = Math.max(0, Math.min(lim.cf_max, parseInt(e.target.value || "0", 10) || 0)); chips.forEach(c => c.classList.remove("sel")); relabel(); } });
+  const relabel = () => { sendBtn.replaceChildren(icon("coin"), `DESAFIAR · ${fmt(st.bet)}`); sendBtn.disabled = st.busy || st.bet < lim.cf_min || !st.target; sideNote.textContent = sideText(); };
+  const chips = chipRack(chipVals, st.bet, v => { st.bet = v; input.value = v; relabel(); });
+  const setBet = n => { st.bet = n; input.value = n; chips.forEach(c => c.classList.remove("sel")); Sfx.chips(4); relabel(); };
+  const x2Btn = h("button", { class: "btn btn-ghost btn-bet-x2", "data-silent": "1", title: "Duplicar la apuesta", text: "×2", onclick: () => {
+    const c = S.profile.balance >= lim.cf_min ? Math.min(lim.cf_max, S.profile.balance) : lim.cf_max, next = Math.min(c, Math.max(lim.cf_min, st.bet * 2));
+    if (next === st.bet) return toast("No te alcanza el saldo para duplicar.", "err"); setBet(next); } });
+  const allinBtn = h("button", { class: "btn btn-gold btn-allin", "data-silent": "1", title: "Apostar todo tu saldo", text: "🔥 ALL IN", onclick: () => {
+    if (S.profile.balance < lim.cf_min) return toast(`Necesitás al menos ${fmt(lim.cf_min)} monedas para apostar.`, "err"); setBet(Math.min(lim.cf_max, S.profile.balance)); } });
+
+  async function send() {
+    if (st.busy || !st.target) return;
+    if (st.bet > S.profile.balance) return toast("No te alcanza el saldo para esa apuesta.", "err");
+    if (!await confirmBox({ title: `Desafiar a ${st.target.name}`, text: `Tu apuesta de ${fmt(st.bet)} monedas queda en custodia hasta que responda (o se devuelve si rechaza o pasan 2 minutos). Elegiste ${st.side}.`, ok: "Desafiar" })) return;
+    st.busy = true; relabel();
+    try {
+      const r = await gpost("/api/duel/create", { target: st.target.id, bet: st.bet, side: st.side });
+      setBalance(r.balance); Sfx.chips(3);
+      toast(r.dm ? `Desafío enviado a ${r.opponent} 🪙 (le avisé por mensaje privado)` : `Desafío enviado a ${r.opponent} 🪙 (no pude avisarle por privado: tiene que entrar al panel o mirar el servidor)`, "gold");
+      await refresh();
+    } catch (e) { toast(e.message, "err"); }
+    st.busy = false; relabel();
+  }
+
+  /* --- listas --- */
+  const incomingBox = h("div"), outgoingBox = h("div"), recentBox = h("div");
+  const left = ts => { const s = Math.max(0, Math.round(ts - now())); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  async function act(path, id, ok) {
+    try {
+      const r = await gpost(path, { id }); st.seen && st.seen.add(id); setBalance(r.balance);
+      if (r.result) {
+        r.won ? (Sfx.win(false), Fx.at($(".bal-chip"), "coins", 14)) : Sfx.lose();
+        toast(r.won ? `¡Salió ${r.result} y ganaste ${fmt(r.bet)} monedas! 🏆` : `Salió ${r.result}… perdiste ${fmt(r.bet)} monedas`, r.won ? "gold" : "err");
+      } else toast(ok, "ok");
+    } catch (e) { toast(e.message, "err"); }
+    refresh();
+  }
+  function paint(d) {
+    incomingBox.replaceChildren(d.incoming.length ? h("div", { class: "card" }, h("h3", { text: "⚔️ Te desafiaron" }), d.incoming.map(x => h("div", { class: "duel-row" },
+      h("div", { class: "duel-main" }, h("b", { text: x.challenger }), ` te desafía por ${fmt(x.bet)} 🪙`,
+        h("small", { text: `Eligió ${x.side} · vos te quedás con ${OTHER[x.side]} · ganás ${fmt(x.bet * 2)} · vence en ${left(x.expires)}` })),
+      h("div", { class: "duel-btns" },
+        h("button", { class: "btn btn-primary btn-sm", disabled: x.bet > S.profile.balance, title: x.bet > S.profile.balance ? "No te alcanza el saldo" : "", text: "Aceptar", onclick: async () => {
+          if (await confirmBox({ title: `Aceptar el duelo de ${x.challenger}`, text: `Ponés ${fmt(x.bet)} monedas. Si sale ${OTHER[x.side]} ganás ${fmt(x.bet * 2)}; si sale ${x.side}, las perdés.`, ok: "Aceptar" })) act("/api/duel/accept", x.id); } }),
+        h("button", { class: "btn btn-ghost btn-sm", text: "Rechazar", onclick: () => act("/api/duel/decline", x.id, "Rechazaste el duelo") })))))
+      : null);
+    outgoingBox.replaceChildren(d.outgoing.length ? h("div", { class: "card" }, h("h3", { text: "⏳ Esperando respuesta" }), d.outgoing.map(x => h("div", { class: "duel-row" },
+      h("div", { class: "duel-main" }, "Desafiaste a ", h("b", { text: x.opponent }), ` por ${fmt(x.bet)} 🪙`, h("small", { text: `Elegiste ${x.side} · vence en ${left(x.expires)}` })),
+      h("div", { class: "duel-btns" }, h("button", { class: "btn btn-ghost btn-sm", text: "Cancelar", onclick: () => act("/api/duel/cancel", x.id, "Desafío cancelado, te devolví la apuesta") })))))
+      : null);
+    recentBox.replaceChildren(h("div", { class: "card" }, h("h3", { text: "Últimos duelos" }), d.recent.length ? d.recent.map(x => {
+      const mineC = x.challenger_id === me, other = mineC ? x.opponent : x.challenger;
+      if (x.status !== "done") return h("div", { class: "duel-row" }, h("div", { class: "duel-main" }, h("span", { class: "note", text: mineC ? `${other} ${DUEL_END[x.status] || "no respondió"} · apuesta devuelta` : `Duelo de ${other}: ${x.status === "declined" ? "lo rechazaste" : x.status === "cancelled" ? "lo canceló" : "venció"}` })));
+      const won = x.winner_id === me;
+      return h("div", { class: "duel-row" }, h("div", { class: "duel-main" }, `${won ? "🏆 Ganaste" : "💸 Perdiste"} contra `, h("b", { text: other }), h("small", { text: `Salió ${x.result}` })),
+        h("div", { class: `log-amt ${won ? "pos" : "neg"}`, text: `${won ? "+" : "−"}${fmt(x.bet)} 🪙` }));
+    }) : h("p", { class: "note", text: "Todavía no jugaste ningún duelo." })));
+  }
+  async function refresh() {
+    const d = await gget("/api/duel/list");
+    if (!alive(token)) return;
+    if (d.balance !== S.profile.balance) setBalance(d.balance);
+    const first = st.seen === null; if (first) st.seen = new Set();
+    for (const x of d.recent) {                                      // avisos de lo que pasó mientras mirabas otra cosa
+      if (st.seen.has(x.id)) continue; st.seen.add(x.id);
+      if (first || x.challenger_id !== me) continue;                  // lo que me toca a mí como retador
+      if (x.status === "done") { const won = x.winner_id === me; won ? Sfx.win(false) : Sfx.lose(); toast(won ? `¡Salió ${x.result} y le ganaste a ${x.opponent}! +${fmt(x.bet)} 🏆` : `Salió ${x.result}… perdiste contra ${x.opponent} (−${fmt(x.bet)})`, won ? "gold" : "err"); }
+      else toast(`${x.opponent} ${DUEL_END[x.status] || "no respondió"}. Te devolví la apuesta.`, "ok");
+    }
+    paint(d);
+  }
+
+  relabel();
+  root.replaceChildren(sectionTitle("Cara o cruz", "Desafiá a alguien del servidor: cada uno pone la misma apuesta y el ganador se lleva todo."), ccTabs(root, token, "duel"),
+    h("div", { class: "grid g2 duel-grid" },
+      h("div", { class: "card duel-form" }, h("h3", { text: "Nuevo desafío" }),
+        h("div", { class: "field" }, h("label", { text: "Contra quién" }), chosen, search, results),
+        h("div", { class: "field" }, h("label", { text: "Tu lado" }), h("div", { class: "side-pick" }, sideBtns), sideNote),
+        h("div", { class: "field" }, h("label", { text: "Apuesta de cada uno" }), h("div", { class: "bj-bet" }, h("div", { class: "row" }, chips, input, x2Btn, allinBtn))),
+        h("div", { class: "row" }, sendBtn),
+        h("p", { class: "note", text: `Mínimo ${fmt(lim.cf_min)} monedas, sin máximo. La otra persona tiene 2 minutos para aceptar desde acá o desde Discord (también podés usar /caracruz duelo).` })),
+      h("div", { class: "duel-side" }, incomingBox, outgoingBox, recentBox)));
+  await refresh();
+  S.duelTimer = setInterval(() => { refresh().catch(() => {}); }, 3000);
+  S.cleanups.push(() => clearInterval(S.duelTimer));
+}

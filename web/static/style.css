@@ -650,3 +650,14 @@ select.txt option { background: #13131d; color: var(--text); }
 .side-btn span { font-size: 22px; }
 .side-btn.on { color: #fff; border-color: var(--gold); background: rgba(232,195,90,.16); box-shadow: 0 0 22px rgba(232,195,90,.35); }
 .side-btn:disabled { opacity: .6; }
+
+/* ---------- duelos ---------- */
+.duel-grid { align-items: start; }
+.duel-form h3, .duel-side h3 { margin-bottom: 12px; }
+.duel-side { display: flex; flex-direction: column; gap: 16px; }
+.duel-form .row { display: flex; justify-content: flex-end; }
+.duel-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.duel-row:last-child { border-bottom: 0; }
+.duel-main { flex: 1; min-width: 0; } .duel-main small { display: block; color: var(--faint); }
+.duel-btns { display: flex; gap: 8px; flex: none; }
+@media (max-width: 900px) { .duel-grid { grid-template-columns: minmax(0, 1fr); } }

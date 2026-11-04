@@ -98,6 +98,27 @@ CREATE TABLE IF NOT EXISTS admin_log (
 );
 CREATE INDEX IF NOT EXISTS idx_admin_log_guild ON admin_log (guild_id, id);
 
+-- Duelos de cara o cruz entre personas (la apuesta del retador queda en custodia mientras espera)
+CREATE TABLE IF NOT EXISTS coin_duels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    challenger_id INTEGER NOT NULL,
+    challenger_name TEXT NOT NULL,
+    opponent_id INTEGER NOT NULL,
+    opponent_name TEXT NOT NULL,
+    bet INTEGER NOT NULL,
+    side TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    winner_id INTEGER,
+    opp_paid INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'discord',
+    created REAL NOT NULL,
+    expires REAL NOT NULL,
+    resolved REAL
+);
+CREATE INDEX IF NOT EXISTS idx_duels_guild ON coin_duels (guild_id, status);
+
 CREATE TABLE IF NOT EXISTS warns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id INTEGER NOT NULL,

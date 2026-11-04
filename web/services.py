@@ -12,6 +12,7 @@ from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, JOBS,
 from cogs.economy import MAX_BET as SL_MAX_BET
 from cogs.economy import MIN_BET as SL_MIN_BET
 from cogs.levels import level_from_xp
+from cogs.duels import DuelError
 from cogs.tags import TagError
 from cogs.roulette import MAX_BET as RL_MAX_BET
 from cogs.roulette import MIN_BET as RL_MIN_BET
@@ -522,6 +523,59 @@ class Services:
                 await self.eco.add(gid, uid, payout)
             await self.record(gid, uid, "coinflip", bet, payout, result)
             return {"result": result, "side": side, "won": won, "payout": payout, "net": payout - bet, "balance": await self.eco.balance(gid, uid)}
+
+    # ------------------------------------------------------------------
+    # Duelos de cara o cruz contra otra persona (misma lógica que /caracruz duelo)
+    # ------------------------------------------------------------------
+    @property
+    def duelcog(self):
+        cog = self.bot.get_cog("Duels")
+        if cog is None:
+            raise ApiError("Los duelos no están activos.", 503)
+        return cog
+
+    async def duel_list(self, gid: int, uid: int) -> dict:
+        self.guild(gid)
+        data = await self.duelcog.listing(gid, uid)
+        data["balance"] = await self.eco.balance(gid, uid)
+        return data
+
+    async def duel_create(self, gid: int, uid: int, target, bet, side) -> dict:
+        guild = self.guild(gid)
+        me = await self.member(guild, uid)
+        if me is None:
+            raise ApiError("No te encuentro en el servidor.", 404)
+        if not isinstance(target, str) or not target.isdigit():
+            raise ApiError("Elegí a una persona.")
+        opp = await self.member(guild, int(target))
+        if opp is None:
+            raise ApiError("No encuentro a esa persona en el servidor.", 404)
+        try:
+            row = await self.duelcog.create(guild, me, opp, bet, side, source="web")
+        except DuelError as e:
+            raise ApiError(e.message, e.status)
+        dm = await self.duelcog.announce(row, opponent=opp)      # aviso por mensaje privado (si lo tiene abierto)
+        return {"id": row["id"], "opponent": opp.display_name, "dm": dm, "balance": await self.eco.balance(gid, uid)}
+
+    async def _duel_action(self, gid: int, uid: int, duel_id, name: str) -> dict:
+        self.guild(gid)
+        if not isinstance(duel_id, int) or isinstance(duel_id, bool):
+            raise ApiError("Duelo inválido.")
+        row = await self.db.fetchone("SELECT guild_id FROM coin_duels WHERE id = ?", (duel_id,))
+        if row is None or row["guild_id"] != gid:
+            raise ApiError("Ese duelo no existe.", 404)
+        try:
+            res = await getattr(self.duelcog, name)(duel_id, uid)
+        except DuelError as e:
+            raise ApiError(e.message, e.status)
+        out = {"id": duel_id, "balance": await self.eco.balance(gid, uid)}
+        if res is not None:
+            out.update(result=res["result"], winner_id=str(res["winner_id"]), won=res["winner_id"] == uid, bet=res["bet"])
+        return out
+
+    async def duel_accept(self, gid, uid, duel_id): return await self._duel_action(gid, uid, duel_id, "accept")
+    async def duel_decline(self, gid, uid, duel_id): return await self._duel_action(gid, uid, duel_id, "decline")
+    async def duel_cancel(self, gid, uid, duel_id): return await self._duel_action(gid, uid, duel_id, "cancel")
 
     # ------------------------------------------------------------------
     # Enviar monedas (mismas reglas que /pay)

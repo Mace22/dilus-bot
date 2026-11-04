@@ -28,6 +28,7 @@ EXTENSIONS = [
     "cogs.ai",
     "cogs.economy",
     "cogs.tags",
+    "cogs.duels",
     "cogs.blackjack",
     "cogs.roulette",
     "cogs.web",
