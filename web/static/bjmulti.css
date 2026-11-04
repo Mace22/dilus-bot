@@ -1,0 +1,80 @@
+/* ============================================================
+   Blackjack multijugador (mesas de hasta 5 personas)
+   Se apoya en las clases del blackjack de siempre (.bj-table, .pcard, .hand, .val, .banner, .shoe)
+   ============================================================ */
+.bjm { display: grid; gap: 18px; }
+.bjm-lobby { display: grid; gap: 16px; }
+.bjm-new h3, .bjm-sub { margin: 0 0 6px; }
+.bjm-betbox { display: grid; gap: 10px; margin: 14px 0; }
+.bjm-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bjm-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.bjm-betwrap { display: grid; gap: 12px; justify-items: center; }
+.bjm-betwrap .bjm-row { justify-content: center; }
+
+/* lista de mesas */
+.bjm-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.bjm-list > .note { grid-column: 1 / -1; }
+.bjm-tcard { display: grid; gap: 12px; align-content: start; }
+.bjm-thead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bjm-thead .note { margin-left: auto; }
+.bjm-pill { padding: 3px 10px; border-radius: 99px; font: 700 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.bjm-pill.open { background: rgba(34,197,94,.18); color: #86efac; border: 1px solid rgba(34,197,94,.45); }
+.bjm-pill.play { background: rgba(232,195,90,.16); color: var(--gold); border: 1px solid rgba(232,195,90,.45); }
+.bjm-players { display: flex; flex-wrap: wrap; gap: 8px; }
+.bjm-peep { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 99px; background: var(--card); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.bjm-peep .avatar { width: 22px; height: 22px; }
+.bjm-peep small { color: var(--muted); }
+
+/* la mesa */
+.bjm-wrap { gap: 14px; }
+.bjm-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bjm-title { font: 700 20px var(--display); }
+.bjm-table { min-height: 0; gap: 14px; padding: 22px 18px 24px; }
+.bjm-table .shoe { right: 20px; top: 18px; transform: scale(.8); transform-origin: top right; }
+.bjm-mid { position: relative; min-height: 84px; display: grid; place-items: center; align-content: center; gap: 4px; text-align: center; padding: 0 10px; }
+.bjm-midtext { font: 700 17px var(--display); color: #f4e4a0; letter-spacing: .04em; }
+.bjm-midsub { color: rgba(244,228,160,.72); font: 600 13px var(--font); }
+.bjm-mid .banner { font-size: 22px; padding: 10px 26px; }
+
+.bjm-seats { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; position: relative; z-index: 1; }
+.bjm-seat {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 214px;
+  padding: 12px 8px 14px; border-radius: 18px; background: rgba(0,0,0,.22); border: 1px solid rgba(232,195,90,.2);
+  transition: border-color .25s, box-shadow .25s, background .25s, opacity .25s;
+}
+.bjm-seat.empty { opacity: .4; border-style: dashed; justify-content: center; }
+.bjm-seat.me { border-color: rgba(167,139,250,.75); }
+.bjm-seat.turn { border-color: var(--gold); background: rgba(232,195,90,.1); box-shadow: 0 0 0 2px rgba(232,195,90,.5), 0 0 30px rgba(232,195,90,.35); }
+.bjm-seat.res-win, .bjm-seat.res-bj { border-color: #22c55e; box-shadow: 0 0 22px rgba(34,197,94,.35); }
+.bjm-seat.res-lose { border-color: rgba(239,68,68,.7); }
+.bjm-seat.res-push { border-color: rgba(148,163,184,.7); }
+
+.bjm-who { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; max-width: 100%; }
+.bjm-av { width: 26px; height: 26px; }
+.bjm-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 13px var(--display); color: #f4e4a0; }
+.bjm-bet { font: 700 13px var(--display); color: #fff; opacity: .9; }
+.bjm-tag { min-height: 20px; text-align: center; font: 700 12px var(--font); color: rgba(255,255,255,.8); }
+.bjm-tag.win { color: #86efac; } .bjm-tag.bj { color: #fcd34d; } .bjm-tag.lose { color: #fca5a5; } .bjm-tag.push { color: #cbd5e1; }
+.bjm-timer { width: 80%; height: 5px; border-radius: 9px; background: rgba(0,0,0,.4); overflow: hidden; opacity: 0; transition: opacity .2s; }
+.bjm-timer.on { opacity: 1; }
+.bjm-timer i { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, var(--gold), #f3d57a); transition: width .25s linear; }
+.bjm-timer.low i { background: linear-gradient(90deg, #ef4444, #f97316); }
+
+/* cartas más chicas dentro de cada asiento */
+.bjm-seat .hand { min-height: 74px; padding-left: var(--ov, 20px); }
+.bjm-seat .pcard { --w: 50px; margin-left: calc(var(--ov, 20px) * -1); }
+.bjm-seat .pc-f { border-radius: 8px; }
+.bjm-seat .pcard .tl, .bjm-seat .pcard .br { font-size: 13px; }
+.bjm-seat .pcard .tl { top: 5px; left: 6px; } .bjm-seat .pcard .br { bottom: 5px; right: 6px; }
+.bjm-seat .pcard .tl small, .bjm-seat .pcard .br small { font-size: 11px; margin-top: 1px; }
+.bjm-seat .pcard .mid { font-size: 26px; padding-top: 0; }
+
+.bjm-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
+.bjm-note { text-align: center; }
+.bjm-leave { display: grid; gap: 6px; justify-items: center; }
+
+@media (max-width: 560px) {
+  .bjm-seats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bjm-list { grid-template-columns: 1fr; }
+  .bjm-table { padding: 16px 10px 18px; }
+}
