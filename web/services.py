@@ -18,7 +18,6 @@ from cogs.roulette import MAX_BET as RL_MAX_BET
 from cogs.roulette import MIN_BET as RL_MIN_BET
 from utils import roulette as rl
 from web.admin import Admin
-from web.bjmulti import BJMulti
 from web.common import ApiError
 
 log = logging.getLogger("dilus-bot.web")
@@ -38,7 +37,6 @@ class Services:
         self._locks: dict[tuple[int, int], asyncio.Lock] = defaultdict(asyncio.Lock)
         self._who: dict[int, tuple[float, tuple[str, str | None]]] = {}
         self.admin = Admin(self)
-        self.bjm = BJMulti(self)                           # mesas de blackjack multijugador
 
     # ------------------------------------------------------------------
     # Utilidades
@@ -311,7 +309,6 @@ class Services:
         if rows:
             await self.db.execute("DELETE FROM web_blackjack")
             log.info("Web: devolví las apuestas de %d mano(s) de blackjack que quedaron abiertas.", len(rows))
-        await self.bjm.recover()
 
     def _bj_dict(self, g: bj.Game, balance: int) -> dict:
         active = g.outcome is None
@@ -425,7 +422,6 @@ class Services:
         for key, (stamp, _) in list(self.expired.items()):    # avisos viejos que nadie vio
             if now - stamp > 3600:
                 self.expired.pop(key, None)
-        await self.bjm.sweep()                                # turnos vencidos y mesas abandonadas
 
     # ------------------------------------------------------------------
     # Ruleta (mismas reglas y pagos que /ruleta)
