@@ -512,7 +512,15 @@ VIEWS.blackjack = async (root, token) => {
     const label = () => st.finished ? `Otra mano · ${fmt(st.bet)}` : `Repartir · ${fmt(st.bet)}`;
     const dealBtn = h("button", { class: "btn btn-gold btn-lg", disabled: st.busy, onclick: deal, text: label() });
     input.addEventListener("input", () => { dealBtn.textContent = label(); dealBtn.disabled = st.busy || st.bet < lim.bj_min; });
-    controls.replaceChildren(h("div", { class: "bj-bet" }, h("div", { class: "row" }, chips, input), h("div", { class: "row" }, dealBtn),
+    const x2Btn = h("button", { class: "btn btn-ghost btn-bet-x2", "data-silent": "1", disabled: st.busy, title: "Duplicar la apuesta", "aria-label": "Duplicar la apuesta", text: "×2",
+      onclick: () => {
+        const cap = S.profile.balance >= lim.bj_min ? Math.min(lim.bj_max, S.profile.balance) : lim.bj_max;   // no pasar del máximo ni del saldo
+        const next = Math.min(cap, Math.max(lim.bj_min, st.bet * 2));
+        if (next === st.bet) return toast(st.bet >= lim.bj_max ? `La apuesta máxima es ${fmt(lim.bj_max)}.` : "No te alcanza el saldo para duplicar.", "err");
+        st.bet = next; input.value = next; chips.forEach(c => c.classList.remove("sel")); Sfx.chip();
+        dealBtn.textContent = label(); dealBtn.disabled = st.busy || st.bet < lim.bj_min;
+      } });
+    controls.replaceChildren(h("div", { class: "bj-bet" }, h("div", { class: "row" }, chips, input, x2Btn), h("div", { class: "row" }, dealBtn),
       h("p", { class: "note", text: `Apuesta de ${fmt(lim.bj_min)} a ${fmt(lim.bj_max)} monedas.` })));
   }
 
