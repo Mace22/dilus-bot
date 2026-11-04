@@ -8,8 +8,7 @@
 .bjm-betbox { display: grid; gap: 10px; margin: 14px 0; }
 .bjm-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .bjm-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.bjm-betwrap { display: grid; gap: 12px; justify-items: center; }
-.bjm-betwrap .bjm-row { justify-content: center; }
+.bjm-center { justify-content: center; }
 
 /* lista de mesas */
 .bjm-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
@@ -42,7 +41,7 @@
   padding: 12px 8px 14px; border-radius: 18px; background: rgba(0,0,0,.22); border: 1px solid rgba(232,195,90,.2);
   transition: border-color .25s, box-shadow .25s, background .25s, opacity .25s;
 }
-.bjm-seat.empty { opacity: .4; border-style: dashed; justify-content: center; }
+.bjm-seat.out { opacity: .6; }
 .bjm-seat.me { border-color: rgba(167,139,250,.75); }
 .bjm-seat.turn { border-color: var(--gold); background: rgba(232,195,90,.1); box-shadow: 0 0 0 2px rgba(232,195,90,.5), 0 0 30px rgba(232,195,90,.35); }
 .bjm-seat.res-win, .bjm-seat.res-bj { border-color: #22c55e; box-shadow: 0 0 22px rgba(34,197,94,.35); }
@@ -53,6 +52,8 @@
 .bjm-av { width: 26px; height: 26px; }
 .bjm-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 13px var(--display); color: #f4e4a0; }
 .bjm-bet { font: 700 13px var(--display); color: #fff; opacity: .9; }
+.bjm-side { display: grid; gap: 2px; text-align: center; font: 600 11px var(--font); color: rgba(255,255,255,.75); }
+.bjm-side:empty { display: none; }
 .bjm-tag { min-height: 20px; text-align: center; font: 700 12px var(--font); color: rgba(255,255,255,.8); }
 .bjm-tag.win { color: #86efac; } .bjm-tag.bj { color: #fcd34d; } .bjm-tag.lose { color: #fca5a5; } .bjm-tag.push { color: #cbd5e1; }
 .bjm-timer { width: 80%; height: 5px; border-radius: 9px; background: rgba(0,0,0,.4); overflow: hidden; opacity: 0; transition: opacity .2s; }
@@ -69,9 +70,24 @@
 .bjm-seat .pcard .tl small, .bjm-seat .pcard .br small { font-size: 11px; margin-top: 1px; }
 .bjm-seat .pcard .mid { font-size: 26px; padding-top: 0; }
 
-.bjm-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
+.bjm-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; justify-content: center; }
 .bjm-note { text-align: center; }
-.bjm-leave { display: grid; gap: 6px; justify-items: center; }
+.bjm-leave { display: grid; gap: 8px; justify-items: center; width: 100%; }
+
+/* borrar mesa (quien la abrió o un admin) */
+.bjm-del { border-color: rgba(239,68,68,.5); color: #fca5a5; }
+.bjm-del:hover:not(:disabled) { background: rgba(239,68,68,.16); }
+.bjm-head .bjm-del { margin-left: auto; }
+.bjm-tbtns { flex-wrap: wrap; }
+
+/* paneles de apuestas */
+.bjm-panel { width: 100%; max-width: 720px; display: grid; gap: 12px; justify-items: center; padding: 16px 18px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.bjm-panel .bjm-betbox { margin: 0; justify-items: center; }
+.bjm-panel .bjm-row { justify-content: center; }
+.bjm-siderow { display: grid; gap: 8px; justify-items: center; width: 100%; padding-top: 10px; border-top: 1px solid var(--line); }
+.bjm-sidewho { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 8px; }
+.bjm-sidewho small { color: var(--muted); }
+.bjm-sideinput { width: 120px; }
 
 @media (max-width: 560px) {
   .bjm-seats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
