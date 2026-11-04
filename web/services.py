@@ -23,7 +23,7 @@ log = logging.getLogger("dilus-bot.web")
 
 BJ_IDLE = 180                  # segundos sin actuar: la mano se planta sola
 RL_MAX_ZONES = 30              # zonas distintas por tirada
-RL_MAX_TOTAL = RL_MAX_BET * 10  # tope total por tirada
+RL_MAX_TOTAL = RL_MAX_BET      # sin tope total (solo alcanza lo que tengas)
 PAY_MAX = 1_000_000            # igual que /pay
 
 
@@ -145,7 +145,7 @@ class Services:
             },
             "work": {"ready_at": row["last_work"] + WORK_COOLDOWN if row["last_work"] else 0, "min": WORK_RANGE[0], "max": WORK_RANGE[1], "cooldown": WORK_COOLDOWN},
             "casino": casino,
-            "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET, "sl_min": SL_MIN_BET, "sl_max": SL_MAX_BET, "pay_max": PAY_MAX},
+            "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET, "sl_min": SL_MIN_BET, "sl_max": SL_MAX_BET, "cf_min": SL_MIN_BET, "cf_max": SL_MAX_BET, "pay_max": PAY_MAX},
             "slots": {"symbols": SLOT_SYMBOLS, "mult": SLOT_MULT, "pair": SLOT_PAIR_MULT},
         }
 
@@ -359,7 +359,7 @@ class Services:
 
     async def bj_deal(self, gid: int, uid: int, bet) -> dict:
         if not isinstance(bet, int) or isinstance(bet, bool) or not bj.MIN_BET <= bet <= bj.MAX_BET:
-            raise ApiError(f"La apuesta tiene que estar entre {bj.MIN_BET} y {bj.MAX_BET}.")
+            raise ApiError(f"La apuesta mínima es {bj.MIN_BET} monedas.")
         key = (gid, uid)
         async with self._locks[key]:
             if key in self.games:
@@ -456,10 +456,10 @@ class Services:
             raise ApiError(f"Como máximo {RL_MAX_ZONES} zonas distintas por tirada.")
         for key, amount in merged.items():
             if not RL_MIN_BET <= amount <= RL_MAX_BET:
-                raise ApiError(f"Cada apuesta tiene que estar entre {RL_MIN_BET} y {RL_MAX_BET} (revisá {rl.bet_info(key).label}).")
+                raise ApiError(f"Cada apuesta tiene que ser de al menos {RL_MIN_BET} monedas (revisá {rl.bet_info(key).label}).")
         total = sum(merged.values())
         if total > RL_MAX_TOTAL:
-            raise ApiError(f"El total de la tirada no puede pasar de {RL_MAX_TOTAL}.")
+            raise ApiError("El total de la tirada es demasiado grande.")
 
         async with self._locks[(gid, uid)]:
             if not await self.eco.add(gid, uid, -total):
@@ -487,7 +487,7 @@ class Services:
     # ------------------------------------------------------------------
     async def slots_spin(self, gid: int, uid: int, bet) -> dict:
         if not isinstance(bet, int) or isinstance(bet, bool) or not SL_MIN_BET <= bet <= SL_MAX_BET:
-            raise ApiError(f"La apuesta tiene que estar entre {SL_MIN_BET} y {SL_MAX_BET}.")
+            raise ApiError(f"La apuesta mínima es {SL_MIN_BET} monedas.")
         async with self._locks[(gid, uid)]:
             if not await self.eco.add(gid, uid, -bet):
                 raise ApiError("No tenés suficientes monedas para esa apuesta.", 402)
@@ -503,6 +503,25 @@ class Services:
                 await self.eco.add(gid, uid, payout)
             await self.record(gid, uid, "slots", bet, payout, " ".join(reels))
             return {"reels": reels, "kind": kind, "mult": mult, "payout": payout, "net": payout - bet, "balance": await self.eco.balance(gid, uid)}
+
+    # ------------------------------------------------------------------
+    # Cara o cruz (mismas reglas que /apostar: si acertás, duplicás lo apostado)
+    # ------------------------------------------------------------------
+    async def coinflip(self, gid: int, uid: int, bet, side) -> dict:
+        if not isinstance(bet, int) or isinstance(bet, bool) or not SL_MIN_BET <= bet <= SL_MAX_BET:
+            raise ApiError(f"La apuesta mínima es {SL_MIN_BET} monedas.")
+        if side not in ("cara", "cruz"):
+            raise ApiError("Elegí cara o cruz.")
+        async with self._locks[(gid, uid)]:
+            if not await self.eco.add(gid, uid, -bet):
+                raise ApiError("No tenés suficientes monedas para esa apuesta.", 402)
+            result = random.SystemRandom().choice(["cara", "cruz"])
+            won = result == side
+            payout = bet * 2 if won else 0
+            if payout:
+                await self.eco.add(gid, uid, payout)
+            await self.record(gid, uid, "coinflip", bet, payout, result)
+            return {"result": result, "side": side, "won": won, "payout": payout, "net": payout - bet, "balance": await self.eco.balance(gid, uid)}
 
     # ------------------------------------------------------------------
     # Enviar monedas (mismas reglas que /pay)

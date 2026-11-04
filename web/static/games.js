@@ -200,10 +200,10 @@ VIEWS.ruleta = async (root, token) => {
   paintHistory();
 
   const infoBar = h("div", { class: "info-bar" }, "👆 Tocá una zona del tablero para apostar. Pasá el mouse (o tocá) para ver cuánto paga y qué chances tiene.");
-  const showInfo = key => {
+  const showInfo = (key, amount = st.chip) => {
     const b = betInfo(key);
     infoBar.replaceChildren(h("b", { text: b.label }), h("span", { text: `paga ${b.ratio} a 1` }), h("span", { class: "muted", text: `· ${pct(b.count)} de chances (${b.count} de 37)` }),
-      h("span", { class: "muted", text: `· ${b.hint}` }), h("span", { class: "gold", text: `· con ${fmt(st.chip)} cobrás ${fmt(st.chip * (b.ratio + 1))}` }));
+      h("span", { class: "muted", text: `· ${b.hint}` }), h("span", { class: "gold", text: `· con ${fmt(amount)} cobrás ${fmt(amount * (b.ratio + 1))}` }));
   };
 
   const totals = () => { const m = new Map(); st.bets.forEach(b => m.set(b.key, (m.get(b.key) || 0) + b.amount)); return m; };
@@ -234,21 +234,32 @@ VIEWS.ruleta = async (root, token) => {
     spinBtn.disabled = st.busy || !st.bets.length;
     undoBtn.disabled = clearBtn.disabled = doubleBtn.disabled = st.busy || !st.bets.length;
     repeatBtn.disabled = st.busy || !st.last.length;
+    allinBtn.disabled = st.busy;
   }
   function pick(key, remove = false) {
     if (st.busy) return;
     clearHighlight();
     if (remove) { st.bets = st.bets.filter(b => b.key !== key); Sfx.chip(); paintStacks(); return refresh(); }
     const t = totals(), cur = t.get(key) || 0;
-    if (cur + st.chip > lim.rl_max) return toast(`Máximo ${fmt(lim.rl_max)} por zona.`, "err");
-    if (totalBet() + st.chip > S.profile.balance) return toast("No te alcanza el saldo para esa ficha.", "err");
+    const allIn = st.allin, amount = allIn ? S.profile.balance - totalBet() : st.chip;      // all in = todo lo que te queda
+    if (allIn && amount < lim.rl_min) return toast(`No te queda saldo para apostar (mínimo ${fmt(lim.rl_min)}).`, "err");
+    if (cur + amount > lim.rl_max) return toast(`Máximo ${fmt(lim.rl_max)} por zona.`, "err");
+    if (totalBet() + amount > S.profile.balance) return toast("No te alcanza el saldo para esa ficha.", "err");
     if (!t.has(key) && t.size >= 30) return toast("Máximo 30 zonas por tirada.", "err");
-    st.bets.push({ key, amount: st.chip }); showInfo(key); refresh();
+    st.bets.push({ key, amount }); showInfo(key, amount); refresh();
     Sfx.chip();
-    flyChip(chipEls[chipVals.indexOf(st.chip)], board.zones.get(key), st.chip, { duration: 380, onEnd: paintStacks });
+    flyChip(allIn ? allinBtn : chipEls[chipVals.indexOf(st.chip)], board.zones.get(key), amount, { duration: 380, onEnd: paintStacks });
+    if (allIn) setAllin(false);                    // el all in se usa una sola vez
   }
   const board = buildBoard(pick, showInfo);
-  const chipEls = chipRack(chipVals, st.chip, v => { st.chip = v; });
+  const chipEls = chipRack(chipVals, st.chip, v => { st.chip = v; setAllin(false, false); });
+  const allinBtn = h("button", { class: "btn btn-gold btn-sm btn-allin", "data-silent": "1", title: "Apostar todo tu saldo en la próxima zona que toques", text: "🔥 ALL IN",
+    onclick: () => { if (st.busy) return; if (S.profile.balance - totalBet() < lim.rl_min) return toast(`No te queda saldo para apostar (mínimo ${fmt(lim.rl_min)}).`, "err"); Sfx.chip(); setAllin(!st.allin); } });
+  function setAllin(on, restoreChip = true) {      // activa/desactiva el modo all in y deja marcada la ficha que corresponde
+    st.allin = on; allinBtn.classList.toggle("sel", on);
+    if (on) chipEls.forEach(e => e.classList.remove("sel"));
+    else if (restoreChip) chipEls.forEach((e, i) => e.classList.toggle("sel", chipVals[i] === st.chip));
+  }
 
   async function spin() {
     if (st.busy || !st.bets.length) return;
@@ -303,7 +314,7 @@ VIEWS.ruleta = async (root, token) => {
       h("div", {},
         h("div", { class: "felt" }, h("div", { class: "board-wrap" }, board.el), infoBar),
         h("div", { class: "rl-actions" },
-          h("div", { class: "left" }, h("div", { class: "chips" }, chipEls), h("div", { class: "chips" }, undoBtn, clearBtn, repeatBtn, doubleBtn)),
+          h("div", { class: "left" }, h("div", { class: "chips" }, chipEls, allinBtn), h("div", { class: "chips" }, undoBtn, clearBtn, repeatBtn, doubleBtn)),
           h("div", { style: { display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-end" } },
             h("div", { class: "rl-total" }, "Apuesta total: ", totalEl, " · zonas: ", zonesEl), spinBtn)),
         resultBox)),
@@ -516,12 +527,18 @@ VIEWS.blackjack = async (root, token) => {
       onclick: () => {
         const cap = S.profile.balance >= lim.bj_min ? Math.min(lim.bj_max, S.profile.balance) : lim.bj_max;   // no pasar del máximo ni del saldo
         const next = Math.min(cap, Math.max(lim.bj_min, st.bet * 2));
-        if (next === st.bet) return toast(st.bet >= lim.bj_max ? `La apuesta máxima es ${fmt(lim.bj_max)}.` : "No te alcanza el saldo para duplicar.", "err");
+        if (next === st.bet) return toast("No te alcanza el saldo para duplicar.", "err");
         st.bet = next; input.value = next; chips.forEach(c => c.classList.remove("sel")); Sfx.chip();
         dealBtn.textContent = label(); dealBtn.disabled = st.busy || st.bet < lim.bj_min;
       } });
-    controls.replaceChildren(h("div", { class: "bj-bet" }, h("div", { class: "row" }, chips, input, x2Btn), h("div", { class: "row" }, dealBtn),
-      h("p", { class: "note", text: `Apuesta de ${fmt(lim.bj_min)} a ${fmt(lim.bj_max)} monedas.` })));
+    const allinBtn = h("button", { class: "btn btn-gold btn-allin", "data-silent": "1", disabled: st.busy, title: "Apostar todo tu saldo", text: "🔥 ALL IN",
+      onclick: () => {
+        if (S.profile.balance < lim.bj_min) return toast(`Necesitás al menos ${fmt(lim.bj_min)} monedas para apostar.`, "err");
+        st.bet = Math.min(lim.bj_max, S.profile.balance); input.value = st.bet; chips.forEach(c => c.classList.remove("sel")); Sfx.chips(4);
+        dealBtn.textContent = label(); dealBtn.disabled = st.busy || st.bet < lim.bj_min;
+      } });
+    controls.replaceChildren(h("div", { class: "bj-bet" }, h("div", { class: "row" }, chips, input, x2Btn, allinBtn), h("div", { class: "row" }, dealBtn),
+      h("p", { class: "note", text: `Apuesta mínima: ${fmt(lim.bj_min)} monedas · sin máximo.` })));
   }
 
   if (data.game && data.game.active) await restore();
@@ -566,6 +583,12 @@ VIEWS.slots = async (root, token) => {
     oninput: e => { st.bet = Math.max(0, Math.min(lim.sl_max, parseInt(e.target.value || "0", 10) || 0)); chips.forEach(c => c.classList.remove("sel")); relabel(); } });
   const relabel = () => { spinBtn.replaceChildren(icon("slots"), `GIRAR · ${fmt(st.bet)}`); spinBtn.disabled = st.busy || st.bet < lim.sl_min; };
   const chips = chipRack(chipVals, st.bet, v => { st.bet = v; input.value = v; relabel(); });
+  const allinBtn = h("button", { class: "btn btn-gold btn-allin", "data-silent": "1", title: "Apostar todo tu saldo", text: "🔥 ALL IN",
+    onclick: () => {
+      if (st.busy) return;
+      if (S.profile.balance < lim.sl_min) return toast(`Necesitás al menos ${fmt(lim.sl_min)} monedas para apostar.`, "err");
+      st.bet = Math.min(lim.sl_max, S.profile.balance); input.value = st.bet; chips.forEach(c => c.classList.remove("sel")); Sfx.chips(4); relabel();
+    } });
 
   let lastTick = 0;
   function spinReel(i, finalSym, dur) {
@@ -591,7 +614,7 @@ VIEWS.slots = async (root, token) => {
 
   async function spin() {
     if (st.busy) return;
-    if (st.bet < lim.sl_min || st.bet > lim.sl_max) return toast(`La apuesta tiene que estar entre ${fmt(lim.sl_min)} y ${fmt(lim.sl_max)}.`, "err");
+    if (st.bet < lim.sl_min) return toast(`La apuesta mínima es ${fmt(lim.sl_min)} monedas.`, "err");
     if (st.bet > S.profile.balance) return toast("No te alcanza el saldo para esa apuesta.", "err");
     st.busy = true; relabel(); chips.forEach(c => { c.disabled = true; });
     machine.classList.remove("jackpot", "pairwin"); reels.forEach(r => r.classList.remove("win")); payRows.forEach(r => r.classList.remove("hit"));
@@ -621,11 +644,101 @@ VIEWS.slots = async (root, token) => {
   root.replaceChildren(sectionTitle("Tragamonedas", "Mismas reglas y pagos que el comando /slots. Tres iguales pagan hasta ×15."),
     h("div", { class: "slots-layout" },
       h("div", { class: "slots-main" }, machine,
-        h("div", { class: "bj-bet slots-bet" }, h("div", { class: "row" }, chips, input), h("div", { class: "row" }, spinBtn),
-          h("p", { class: "note", text: `Apuesta de ${fmt(lim.sl_min)} a ${fmt(lim.sl_max)} monedas.` }))),
+        h("div", { class: "bj-bet slots-bet" }, h("div", { class: "row" }, chips, input, allinBtn), h("div", { class: "row" }, spinBtn),
+          h("p", { class: "note", text: `Apuesta mínima: ${fmt(lim.sl_min)} monedas · sin máximo.` }))),
       paytable),
     howBox([
       ["Cómo se juega", "Elegí cuánto apostar y tirá de la palanca (o tocá GIRAR). Se detienen los tres carretes uno por uno."],
       ["Qué paga", "Tres símbolos iguales pagan según la tabla (hasta ×15). Dos iguales pagan ×1,4. Si no hay iguales, perdés la apuesta."],
       ["A tener en cuenta", "Cada giro es independiente: no hay rachas ni «momentos» para jugar. Jugá por diversión."]]));
+};
+
+
+/* ============================================================
+   CARA O CRUZ (mismas reglas que /apostar: acertás y duplicás)
+   ============================================================ */
+VIEWS.caracruz = async (root, token) => {
+  const lim = S.profile.limits;
+  const chipVals = CHIPS.filter(v => v >= lim.cf_min && v <= lim.cf_max);
+  const st = { bet: chipVals.includes(100) ? 100 : chipVals[0], side: "cara", busy: false, rot: 0, hist: [] };
+  const FACE = { cara: "😎", cruz: "✖" };
+
+  const coin = h("div", { class: "coin3d" },
+    h("div", { class: "coin-face front" }, h("span", { text: FACE.cara }), h("small", { text: "CARA" })),
+    h("div", { class: "coin-face back" }, h("span", { text: FACE.cruz }), h("small", { text: "CRUZ" })));
+  const toss = h("div", { class: "coin-toss" }, coin);
+  const stage = h("div", { class: "coin-stage" }, toss, h("div", { class: "coin-shadow" }));
+  const display = h("div", { class: "led coin-led", text: "Elegí un lado y lanzá" });
+  const histEl = h("div", { class: "hist" });
+  const paintHist = () => histEl.replaceChildren(...(st.hist.length
+    ? st.hist.slice(-12).map(x => h("i", { class: x.won ? "green" : "red", title: x.won ? "Ganaste" : "Perdiste", text: x.result === "cara" ? "C" : "X" }))
+    : [h("span", { class: "note", text: "Todavía no lanzaste" })]));
+  paintHist();
+
+  const sideBtns = ["cara", "cruz"].map(k => h("button", { class: `side-btn ${k === st.side ? "on" : ""}`, "data-silent": "1", "aria-pressed": String(k === st.side),
+    onclick: () => { if (st.busy) return; st.side = k; Sfx.chip(); sideBtns.forEach(b => { b.classList.toggle("on", b.dataset.k === k); b.setAttribute("aria-pressed", String(b.dataset.k === k)); }); } },
+    h("span", { text: FACE[k] }), k === "cara" ? "Cara" : "Cruz"));
+  sideBtns.forEach((b, i) => { b.dataset.k = ["cara", "cruz"][i]; });
+
+  const flipBtn = h("button", { class: "btn btn-gold btn-lg", "data-silent": "1", onclick: flip });
+  const input = h("input", { class: "num-input", type: "number", inputmode: "numeric", min: lim.cf_min, max: lim.cf_max, value: st.bet, "aria-label": "Apuesta",
+    oninput: e => { st.bet = Math.max(0, Math.min(lim.cf_max, parseInt(e.target.value || "0", 10) || 0)); chips.forEach(c => c.classList.remove("sel")); relabel(); } });
+  const relabel = () => { flipBtn.replaceChildren(icon("coin"), `LANZAR · ${fmt(st.bet)}`); flipBtn.disabled = st.busy || st.bet < lim.cf_min; };
+  const chips = chipRack(chipVals, st.bet, v => { st.bet = v; input.value = v; relabel(); });
+  const setBet = n => { st.bet = n; input.value = n; chips.forEach(c => c.classList.remove("sel")); Sfx.chips(4); relabel(); };
+  const x2Btn = h("button", { class: "btn btn-ghost btn-bet-x2", "data-silent": "1", title: "Duplicar la apuesta", "aria-label": "Duplicar la apuesta", text: "×2",
+    onclick: () => {
+      if (st.busy) return;
+      const cap = S.profile.balance >= lim.cf_min ? Math.min(lim.cf_max, S.profile.balance) : lim.cf_max;
+      const next = Math.min(cap, Math.max(lim.cf_min, st.bet * 2));
+      if (next === st.bet) return toast("No te alcanza el saldo para duplicar.", "err");
+      setBet(next);
+    } });
+  const allinBtn = h("button", { class: "btn btn-gold btn-allin", "data-silent": "1", title: "Apostar todo tu saldo", text: "🔥 ALL IN",
+    onclick: () => {
+      if (st.busy) return;
+      if (S.profile.balance < lim.cf_min) return toast(`Necesitás al menos ${fmt(lim.cf_min)} monedas para apostar.`, "err");
+      setBet(Math.min(lim.cf_max, S.profile.balance));
+    } });
+  const lock = on => { st.busy = on; chips.forEach(c => { c.disabled = on; }); sideBtns.forEach(b => { b.disabled = on; }); x2Btn.disabled = allinBtn.disabled = input.disabled = on; relabel(); };
+
+  async function flip() {
+    if (st.busy) return;
+    if (st.bet < lim.cf_min) return toast(`La apuesta mínima es ${fmt(lim.cf_min)} monedas.`, "err");
+    if (st.bet > S.profile.balance) return toast("No te alcanza el saldo para esa apuesta.", "err");
+    lock(true); stage.classList.remove("win", "lose");
+    display.textContent = "Lanzando…";
+    const before = S.profile.balance; setBalance(before - st.bet);
+    let r;
+    try { r = await gpost("/api/coinflip", { bet: st.bet, side: st.side }); }
+    catch (e) { toast(e.message, "err"); setBalance(before); lock(false); display.textContent = "Elegí un lado y lanzá"; return; }
+    Sfx.spinStart();
+    const turns = 5 + Math.floor(Math.random() * 3), target = turns * 360 + (r.result === "cara" ? 0 : 180), dur = 1700;
+    const spin = coin.animate([{ transform: `rotateY(${st.rot}deg)` }, { transform: `rotateY(${target}deg)` }], { duration: dur, easing: "cubic-bezier(.2,.7,.25,1)", fill: "forwards" });
+    const up = toss.animate([{ transform: "translateY(0) scale(1)" }, { transform: "translateY(-150px) scale(1.18)", offset: 0.5 }, { transform: "translateY(0) scale(1)" }], { duration: dur, easing: "ease-in-out" });
+    await Promise.all([spin.finished, up.finished].map(p => p.catch(() => {})));
+    if (!alive(token)) return;
+    st.rot = target % 360; coin.style.transform = `rotateY(${st.rot}deg)`; spin.cancel();
+    toss.animate([{ transform: "translateY(6px) scaleY(.95)" }, { transform: "none" }], { duration: 240, easing: "ease-out" });
+
+    st.hist.push(r); paintHist();
+    stage.classList.add(r.won ? "win" : "lose");
+    if (r.won) {
+      display.textContent = `¡Salió ${r.result}! +${fmt(r.net)}`; Sfx.win(r.net >= 5000); Fx.at(stage, "coins", 14);
+      toast(`¡Ganaste ${fmt(r.net)} monedas en cara o cruz! 🪙`, "gold");
+    } else { display.textContent = `Salió ${r.result}… perdiste ${fmt(st.bet)}`; Sfx.lose(); }
+    setBalance(r.balance);
+    lock(false);
+  }
+
+  relabel();
+  root.replaceChildren(sectionTitle("Cara o cruz", "Mismas reglas que el comando /apostar: si acertás, duplicás lo apostado."),
+    h("div", { class: "card coin-card" }, stage, display, h("div", { class: "hist-label", text: "Últimos lanzamientos" }), histEl,
+      h("div", { class: "side-pick" }, sideBtns),
+      h("div", { class: "bj-bet slots-bet" }, h("div", { class: "row" }, chips, input, x2Btn, allinBtn), h("div", { class: "row" }, flipBtn),
+        h("p", { class: "note", text: `Apuesta mínima: ${fmt(lim.cf_min)} monedas · sin máximo. Si acertás cobrás ×2.` }))),
+    howBox([
+      ["Cómo se juega", "Elegí cara o cruz, poné cuánto apostás y lanzá la moneda."],
+      ["Qué paga", "Si acertás, recibís el doble de lo apostado (ganás lo mismo que pusiste). Si no, perdés la apuesta."],
+      ["A tener en cuenta", "Cada lanzamiento es 50/50 e independiente: que haya salido cara varias veces seguidas no cambia nada. Jugá por diversión."]]));
 };

@@ -9,7 +9,10 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const $ = (sel, root = document) => root.querySelector(sel);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-const short = n => (n >= 1000 ? (n / 1000).toFixed(n % 1000 ? 1 : 0).replace(".", ",").replace(",0", "") + "K" : String(n));
+const short = n => {
+  const f = (v, u) => v.toFixed(v % 1 ? 1 : 0).replace(".", ",") + u;
+  return n >= 1e9 ? f(n / 1e9, "B") : n >= 1e6 ? f(n / 1e6, "M") : n >= 1000 ? f(n / 1000, "K") : String(n);
+};
 const pct = c => (c / 37 * 100).toFixed(1).replace(".", ",") + "%";
 
 function h(tag, props, ...kids) {
@@ -54,6 +57,7 @@ Object.assign(ICONS, {
   volume: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
   volumeOff: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>',
   send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>',
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -209,6 +213,7 @@ const NAV = [
   { id: "ruleta", label: "Ruleta", icon: "wheel" },
   { id: "blackjack", label: "Blackjack", icon: "cards" },
   { id: "slots", label: "Slots", icon: "slots" },
+  { id: "caracruz", label: "Cara o cruz", icon: "coin" },
   { id: "tienda", label: "Tienda", icon: "bag" },
   { id: "tags", label: "Tags", icon: "palette" },
   { id: "ranking", label: "Ranking", icon: "trophy" },
@@ -420,7 +425,7 @@ VIEWS.inicio = async (root, token) => {
     h("div", { class: "sec-title" }, h("h2", { text: "Casino" })),
     h("div", { class: "grid g2" }, casinoCard("roulette", "Ruleta", "🎡"), casinoCard("blackjack", "Blackjack", "🃏")),
     h("div", { class: "sec-title" }, h("h2", { text: "Jugá ahora" })),
-    h("div", { class: "grid g3" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15")));
+    h("div", { class: "grid g4" }, play("ruleta", "🎡", "Ruleta europea", "Fichas, tablero y rueda animada"), play("blackjack", "🃏", "Blackjack", "Contra el dealer, paga 3 a 2"), play("slots", "🎰", "Tragamonedas", "Tres iguales pagan hasta ×15"), play("caracruz", "🪙", "Cara o cruz", "Acertá y duplicás tu apuesta")));
   root.querySelectorAll("[data-count]").forEach(el => countUp(el, +el.dataset.count));
   if (!S.intro) { S.intro = true; shownBal = 0; setBalance(S.profile.balance); }
 };

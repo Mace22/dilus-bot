@@ -15,7 +15,7 @@ log = logging.getLogger("dilus-bot.roulette")
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
 COIN = "🪙"
-MIN_BET, MAX_BET = 10, 10_000   # por cada apuesta
+MIN_BET, MAX_BET = 10, 2**53 - 1   # por cada apuesta (mínimo 10, sin máximo)
 MAX_BETS_PER_PLAYER = 8         # apuestas distintas que puede tener una persona por ronda
 BET_TIME = 45                   # segundos que la mesa queda abierta (se puede cambiar en /ruleta)
 SPIN_WAIT = 6.5                 # segundos que dura la animación antes de mostrar el resultado
@@ -34,7 +34,7 @@ def parse_amount(text: str) -> int | None:
         if s.endswith("k"):
             return int(round(float(s[:-1].replace(",", ".")) * 1000))
         return int(s.replace(".", "").replace(",", ""))
-    except ValueError:
+    except (ValueError, OverflowError):
         return None
 
 
@@ -86,7 +86,7 @@ class BetModal(discord.ui.Modal):
             self.number = discord.ui.TextInput(label="Número (del 0 al 36)", placeholder="Ej: 17", min_length=1, max_length=2)
             self.add_item(self.number)
         self.amount = discord.ui.TextInput(
-            label=f"Monedas a apostar ({MIN_BET}-{fmt(MAX_BET)})", placeholder="Ej: 500  (también vale 1k)", min_length=1, max_length=9
+            label=f"Monedas a apostar (mínimo {MIN_BET}, sin máximo)", placeholder="Ej: 500  (también vale 1k)", min_length=1, max_length=16
         )
         self.add_item(self.amount)
 
@@ -108,7 +108,7 @@ class BetModal(discord.ui.Modal):
             )
         if not MIN_BET <= amount <= MAX_BET:
             return await interaction.response.send_message(
-                embed=error(f"Cada apuesta tiene que estar entre **{MIN_BET}** y **{fmt(MAX_BET)}** {COIN}."), ephemeral=True
+                embed=error(f"Cada apuesta tiene que ser de al menos **{MIN_BET}** {COIN}."), ephemeral=True
             )
 
         await interaction.response.defer(ephemeral=True)
@@ -388,7 +388,7 @@ class Roulette(commands.Cog):
                 f"**¡Mesa abierta!** Cierra <t:{end}:R> y la bola gira sola.\n\n"
                 "**Cómo apostar**\n"
                 "1️⃣ Elegí qué apostar en el menú o con los botones\n"
-                f"2️⃣ Escribí cuántas monedas ponés ({MIN_BET} a {fmt(MAX_BET)})\n"
+                f"2️⃣ Escribí cuántas monedas ponés (mínimo {MIN_BET}, sin máximo)\n"
                 "3️⃣ Esperá el giro: si sale lo tuyo, cobrás al instante\n\n"
                 "*Tus fichas aparecen en el tablero, en la zona donde apostaste. ¿Dudas? Tocá* ❓ ***Ayuda***."
             ),

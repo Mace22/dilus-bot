@@ -17,7 +17,8 @@ WORK_RANGE = (50, 150)      # monedas por /trabajar
 WORK_COOLDOWN = 3600        # segundos entre /trabajar
 CHAT_COINS = (1, 3)         # monedas por mensaje (con cooldown)
 CHAT_COOLDOWN = 60
-MIN_BET, MAX_BET = 10, 5000
+NO_LIMIT = 2**53 - 1       # "sin máximo" (es el tope que acepta Discord para un número entero)
+MIN_BET, MAX_BET = 10, NO_LIMIT
 # -----------------------------------------------------------------
 
 JOBS = [

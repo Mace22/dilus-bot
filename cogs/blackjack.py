@@ -16,7 +16,7 @@ log = logging.getLogger("dilus-bot.blackjack")
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
 COIN = "🪙"
-MIN_BET, MAX_BET = 10, 10_000
+MIN_BET, MAX_BET = 10, 2**53 - 1   # sin máximo (mínimo 10)
 DECKS = 6                 # cantidad de mazos en el zapato
 DEALER_DELAY = 1.0        # segundos entre cada carta que saca el dealer
 IDLE_TIMEOUT = 90         # segundos sin tocar nada: se planta solo
@@ -458,7 +458,7 @@ class Blackjack(commands.Cog):
 
     # ---- comando ----
     @app_commands.command(name="blackjack", description="🃏 Jugá al Blackjack contra el dealer apostando monedas")
-    @app_commands.describe(apuesta=f"Monedas a apostar ({MIN_BET} a {fmt(MAX_BET)})")
+    @app_commands.describe(apuesta=f"Monedas a apostar (mínimo {MIN_BET}, sin máximo)")
     @app_commands.guild_only()
     async def blackjack(self, interaction: discord.Interaction, apuesta: app_commands.Range[int, MIN_BET, MAX_BET]):
         game, err = await self.deal(interaction.guild_id, interaction.user, apuesta)

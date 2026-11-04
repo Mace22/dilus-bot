@@ -3,8 +3,8 @@
    Funciones extra: logros, historial con gráfico y envío de monedas.
    ============================================================ */
 
-const GAME_NAME = { roulette: "Ruleta", blackjack: "Blackjack", slots: "Tragamonedas" };
-const GAME_EMOJI = { roulette: "🎡", blackjack: "🃏", slots: "🎰" };
+const GAME_NAME = { roulette: "Ruleta", blackjack: "Blackjack", slots: "Tragamonedas", coinflip: "Cara o cruz" };
+const GAME_EMOJI = { roulette: "🎡", blackjack: "🃏", slots: "🎰", coinflip: "🪙" };
 const OUT_TXT = { blackjack: "Blackjack", win: "Ganó", dealer_bust: "Dealer se pasó", lose: "Perdió", bust: "Se pasó", dealer_blackjack: "Blackjack del dealer", push: "Empate" };
 const TIER_NAME = { bronze: "Bronce", silver: "Plata", gold: "Oro" };
 
@@ -18,6 +18,7 @@ function fmtAgo(ts) {
 function playDetail(it) {
   if (it.game === "roulette") return `Salió el ${it.detail}`;
   if (it.game === "slots") return it.detail;
+  if (it.game === "coinflip") return `Salió ${it.detail}`;
   return OUT_TXT[it.detail] || it.detail;
 }
 
