@@ -350,7 +350,7 @@ function pcardEl(data) {                           // carta 3D: se crea boca aba
   return el;
 }
 
-const bjSolo = async (root, token) => {
+VIEWS.blackjack = async (root, token) => {
   const lim = S.profile.limits;
   const chipVals = CHIPS.filter(v => v >= lim.bj_min && v <= lim.bj_max);
   const st = { bet: chipVals.includes(100) ? 100 : chipVals[0], game: null, busy: false, finished: false, spotAmount: 0 };
@@ -547,23 +547,12 @@ const bjSolo = async (root, token) => {
     toast(`Tu mano anterior se cerró por inactividad (me planté por vos): ${o ? o.t.toLowerCase() : ""}.`);
   }
   renderControls();
-  root.replaceChildren(sectionTitle("Blackjack", "Mismas reglas que /blackjack: mazo de 6, el dealer se planta en 17."), bjTabs(root, token, "casa"), h("div", { class: "bj" }, table, controls),
+  root.replaceChildren(sectionTitle("Blackjack", "Mismas reglas que /blackjack: mazo de 6, el dealer se planta en 17."), h("div", { class: "bj" }, table, controls),
     howBox([
       ["Objetivo", "Acercate a 21 sin pasarte y ganale al dealer. Las figuras valen 10 y el As vale 11 u 1, lo que más te convenga."],
       ["Tus opciones", "Pedir suma una carta. Plantarse termina tu turno. Doblar duplica la apuesta, te da una sola carta y te planta."],
       ["Pagos", "Ganar paga 1 a 1, el Blackjack natural (21 con dos cartas) paga 3 a 2 y el empate devuelve la apuesta. El dealer se planta en 17."]]));
   if (st.game) { await sleep(0); showSpot(st.game.bet); }
-};
-
-/* Pestañas del blackjack: contra la casa (una mano sola) o multijugador (mesas de hasta 5, ver bjmulti.js) */
-const bjTabs = (root, token, mode) => h("div", { class: "tabs" },
-  h("button", { class: mode === "casa" ? "on" : "", text: "🃏 Contra la casa", onclick: () => VIEWS.blackjack(root, token, "casa") }),
-  h("button", { class: mode === "multi" ? "on" : "", text: "👥 Multijugador", onclick: () => VIEWS.blackjack(root, token, "multi") }));
-
-VIEWS.blackjack = async (root, token, mode = "casa") => {
-  clearInterval(S.bjmTimer); clearInterval(S.bjmTick); S.bjmRun = null;      // corta la mesa multijugador si estaba abierta
-  if (mode === "multi") return VIEWS.bjmulti(root, token);
-  return bjSolo(root, token);
 };
 
 /* ============================================================

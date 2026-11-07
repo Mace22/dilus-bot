@@ -1,14 +1,12 @@
-import asyncio
 import random
 import time
+from dataclasses import dataclass
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from utils import adminlog
-from utils import work as W
-from utils import work_render as WR
 from utils.embeds import error, make_embed, ok
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
@@ -16,6 +14,7 @@ COIN = "🪙"
 DAILY_BASE = 200            # monedas del /daily
 DAILY_STREAK_BONUS = 25     # extra por cada día seguido
 DAILY_STREAK_CAP = 10       # tope de días para el bonus
+TASK_COOLDOWN = 60          # segundos de espera entre una tarea y la siguiente (cada tarea tiene su propio reloj)
 CHAT_COINS = (1, 3)         # monedas por mensaje (con cooldown)
 CHAT_COOLDOWN = 60
 NO_LIMIT = 2**53 - 1       # "sin máximo" (es el tope que acepta Discord para un número entero)
@@ -33,6 +32,46 @@ JOBS = [
     "vendiste empanadas en la facultad",
 ]
 
+JOBS2 = [
+    "ordenaste el depósito del barrio",
+    "ayudaste con una mudanza",
+    "repartiste volantes en el centro",
+    "armaste muebles para una vecina",
+    "pasaste apuntes en limpio",
+    "regaste las plantas de la plaza",
+]
+JOBS3 = [
+    "editaste un video para un streamer",
+    "hiciste una traducción rápida",
+    "testeaste un juego indie",
+    "organizaste un torneo del server",
+    "diste una clase particular",
+    "moderaste un chat durante un evento",
+]
+
+
+@dataclass(frozen=True)
+class Task:
+    key: str
+    title: str
+    rng: tuple[int, int]
+    jobs: list[str]
+
+
+# Tareas disponibles: tocá premios y textos a gusto. Todas esperan TASK_COOLDOWN segundos.
+TASKS: dict[str, Task] = {
+    "trabajar": Task("trabajar", "Trabajar", (50, 150), JOBS),
+    "tarea1": Task("tarea1", "Tarea 1", (30, 90), JOBS2),
+    "tarea2": Task("tarea2", "Tarea 2", (80, 200), JOBS3),
+}
+
+
+class TaskCooldown(Exception):
+    def __init__(self, ready_at: float):
+        super().__init__("cooldown")
+        self.ready_at = ready_at
+
+
 SLOT_SYMBOLS = ["🍒", "🍋", "🔔", "💎", "7️⃣"]
 SLOT_MULT = {"🍒": 3, "🍋": 4, "🔔": 5, "💎": 8, "7️⃣": 15}
 SLOT_PAIR_MULT = 1.4
@@ -40,80 +79,6 @@ SLOT_PAIR_MULT = 1.4
 
 def fmt(n: int) -> str:
     return f"{n:,}".replace(",", ".")
-
-
-class TaskModal(discord.ui.Modal, title="Tarea"):
-    respuesta = discord.ui.TextInput(label="Tu respuesta", max_length=40)
-
-    def __init__(self, cog, answer: str):
-        super().__init__()
-        self.cog, self.answer = cog, answer
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if not W.check(self.respuesta.value, self.answer):
-            await W.fail_task(self.cog.bot.db, interaction.guild_id, interaction.user.id)
-            return await interaction.response.send_message(embed=error(f"Incorrecto. La respuesta era **{self.answer}**. Perdiste tu racha 💔"), ephemeral=True)
-        r = await W.finish_task(self.cog.bot.db, interaction.guild_id, interaction.user.id)
-        msg = f"¡Correcto! Ganaste **{fmt(r['reward'])}** {COIN}  •  Racha: **{r['streak']}** 🔥" + (f" (+{r['bonus']}%)" if r["bonus"] else "")
-        if r["leveled"]:
-            msg += f"\n🎉 ¡Subiste a **{r['title']}** (nivel {r['level']})!"
-        await interaction.response.send_message(embed=ok(msg))
-
-
-class MiniView(discord.ui.View):
-    def __init__(self, cog, uid: int, spec: dict, expected: str, inter: discord.Interaction):
-        super().__init__(timeout=60)
-        self.cog, self.uid, self.spec, self.expected, self.inter = cog, uid, spec, expected, inter
-        self.picked: list[int] = []
-        self.done = False
-        for i, label in enumerate(spec["options"]):
-            b = discord.ui.Button(label=label, style=discord.ButtonStyle.secondary, row=i // 4 if len(spec["options"]) > 5 else 0)
-            b.callback = self._make_cb(i, b)
-            self.add_item(b)
-
-    def _make_cb(self, i: int, b: discord.ui.Button):
-        async def cb(interaction: discord.Interaction):
-            if interaction.user.id != self.uid or self.done:
-                return await interaction.response.defer()
-            self.picked.append(i)
-            b.disabled, b.style = True, discord.ButtonStyle.primary
-            if len(self.picked) < self.spec["need"]:
-                emb = make_embed(title=f"🎮 {self.spec['title']}", description=f"{self.spec['prompt']}\n\nLlevás **{len(self.picked)}/{self.spec['need']}**")
-                return await interaction.response.edit_message(embed=emb, view=self)
-            self.done = True
-            self.stop()
-            gid = interaction.guild_id
-            if ",".join(map(str, self.picked)) != self.expected:
-                await W.fail_task(self.cog.bot.db, gid, self.uid)
-                return await interaction.response.edit_message(embed=error("¡Fallaste! Perdiste tu racha 💔"), view=None)
-            r = await W.finish_task(self.cog.bot.db, gid, self.uid, self.spec["mult"])
-            msg = f"¡Genial! Ganaste **{fmt(r['reward'])}** {COIN}  •  Racha: **{r['streak']}** 🔥" + (f" (+{r['bonus']}%)" if r["bonus"] else "")
-            if r["leveled"]:
-                msg += f"\n🎉 ¡Subiste a **{r['title']}** (nivel {r['level']})!"
-            await interaction.response.edit_message(embed=ok(msg), view=None)
-        return cb
-
-    async def on_timeout(self):
-        if not self.done:
-            await W.fail_task(self.cog.bot.db, self.inter.guild_id, self.uid)
-            try:
-                await self.inter.edit_original_response(embed=error("⏰ Se acabó el tiempo."), view=None)
-            except discord.HTTPException:
-                pass
-
-
-class TaskView(discord.ui.View):
-    def __init__(self, cog, uid: int, answer: str):
-        super().__init__(timeout=60)
-        self.cog, self.uid, self.answer, self.done = cog, uid, answer, False
-
-    @discord.ui.button(label="Responder", style=discord.ButtonStyle.primary, emoji="✏️")
-    async def reply(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.uid or self.done:
-            return await interaction.response.send_message(embed=error("Esta tarea ya no está disponible."), ephemeral=True)
-        self.done = True
-        self.stop()
-        await interaction.response.send_modal(TaskModal(self.cog, self.answer))
 
 
 class Economy(commands.Cog):
@@ -200,96 +165,50 @@ class Economy(commands.Cog):
             embed=ok(f"Recibiste **{fmt(reward)}** {COIN}  •  Racha: **{streak}** día(s) 🔥")
         )
 
-    @app_commands.command(name="trabajar", description="Trabajá un rato para ganar monedas (subí de nivel para ganar más)")
+    async def task_times(self, gid: int, uid: int) -> dict[str, float]:
+        rows = await self.bot.db.fetchall("SELECT task, last FROM task_cd WHERE guild_id = ? AND user_id = ?", (gid, uid))
+        return {r["task"]: r["last"] for r in rows}
+
+    async def do_task(self, gid: int, uid: int, key: str) -> tuple[int, str, float]:
+        """Hace una tarea. Devuelve (premio, texto, cuándo se puede volver a hacer). Lanza TaskCooldown si todavía no se puede."""
+        task = TASKS[key]
+        await self.bot.db.execute("INSERT OR IGNORE INTO task_cd (guild_id, user_id, task) VALUES (?, ?, ?)", (gid, uid, key))
+        row = await self.bot.db.fetchone("SELECT last FROM task_cd WHERE guild_id = ? AND user_id = ? AND task = ?", (gid, uid, key))
+        now, last = time.time(), row["last"]
+        if now - last < TASK_COOLDOWN:
+            raise TaskCooldown(last + TASK_COOLDOWN)
+        cur = await self.bot.db.execute(
+            "UPDATE task_cd SET last = ? WHERE guild_id = ? AND user_id = ? AND task = ? AND last = ?", (now, gid, uid, key, last)
+        )
+        if cur.rowcount == 0:
+            raise TaskCooldown(now + TASK_COOLDOWN)
+        reward = random.randint(*task.rng)
+        await self.add(gid, uid, reward)
+        return reward, random.choice(task.jobs), now + TASK_COOLDOWN
+
+    async def _task_cmd(self, interaction: discord.Interaction, key: str):
+        try:
+            reward, job, _ = await self.do_task(interaction.guild_id, interaction.user.id, key)
+        except TaskCooldown as e:
+            return await interaction.response.send_message(
+                embed=error(f"Estás cansado. Podés volver a hacerlo <t:{int(e.ready_at)}:R>."), ephemeral=True
+            )
+        await interaction.response.send_message(embed=ok(f"{job.capitalize()} y ganaste **{fmt(reward)}** {COIN}"))
+
+    @app_commands.command(name="trabajar", description="Trabajá un rato para ganar monedas (cada 1 minuto)")
     @app_commands.guild_only()
     async def trabajar(self, interaction: discord.Interaction):
-        gid, uid = interaction.guild_id, interaction.user.id
-        await self._ensure(gid, uid)
-        status, data = await W.do_work(self.bot.db, gid, uid)
-        if status == "cooldown":
-            return await interaction.response.send_message(
-                embed=error(f"Estás cansado. Podés volver a trabajar <t:{int(data)}:R>."), ephemeral=True
-            )
-        if status == "busy":
-            return await interaction.response.send_message(embed=error("Ya estás trabajando."), ephemeral=True)
-        msg = f"{random.choice(JOBS).capitalize()} y ganaste **{fmt(data['reward'])}** {COIN}  •  Nivel **{data['level']}** ({data['title']})"
-        if data["event"]:
-            msg = f"{data['event']}\n" + msg
-        if data["leveled"]:
-            msg += f"\n🎉 ¡Subiste a **{data['title']}**! Ahora ganás **+{int(W.LEVEL_BONUS * 100 * (data['level'] - 1))}%** por trabajo."
-        await interaction.response.send_message(embed=ok(msg))
+        await self._task_cmd(interaction, "trabajar")
 
-    @app_commands.command(name="tarea", description="Resolvé un puzzle o minijuego rápido para ganar un extra de monedas")
+    @app_commands.command(name="tarea1", description="Hacé la tarea 1 para ganar monedas (cada 1 minuto)")
     @app_commands.guild_only()
-    async def tarea(self, interaction: discord.Interaction):
-        gid, uid = interaction.guild_id, interaction.user.id
-        await self._ensure(gid, uid)
-        status, ready = await W.start_task(self.bot.db, gid, uid)
-        if status == "cooldown":
-            return await interaction.response.send_message(
-                embed=error(f"Todavía no hay tareas nuevas. Volvé <t:{int(ready)}:R>."), ephemeral=True
-            )
-        spec, answer = W.new_task()
-        if spec["type"] == "text":
-            view = TaskView(self, uid, answer)
-            return await interaction.response.send_message(
-                embed=make_embed(title="📋 Tarea", description=f"{spec['prompt']}\n\nTenés **60 segundos**."), view=view, ephemeral=True
-            )
-        if spec["preview"]:
-            emb = make_embed(title=f"🎮 {spec['title']}", description=f"{spec['prompt']}\n\n# {spec['preview']}\n\n¡Tenés **{spec['preview_s']} segundos**!")
-            await interaction.response.send_message(embed=emb, ephemeral=True)
-            await asyncio.sleep(spec["preview_s"])
-            desc = "¡Ahora tocá en orden!" if spec["type"] == "seq" else "¿Cuál es la respuesta?"
-        else:
-            await interaction.response.defer(ephemeral=True)
-            desc = ""
-        view = MiniView(self, uid, spec, answer, interaction)
-        emb = make_embed(title=f"🎮 {spec['title']}", description=f"{spec['prompt'] if not spec['preview'] else desc}\n\nTenés **60 segundos**.")
-        await interaction.edit_original_response(embed=emb, view=view)
+    async def tarea1(self, interaction: discord.Interaction):
+        await self._task_cmd(interaction, "tarea1")
 
-    @app_commands.command(name="nivel-trabajo", description="Tu tarjeta de nivel de trabajo")
+    @app_commands.command(name="tarea2", description="Hacé la tarea 2 para ganar monedas (cada 1 minuto)")
     @app_commands.guild_only()
-    async def nivel_trabajo(self, interaction: discord.Interaction, miembro: discord.Member | None = None):
-        m = miembro or interaction.user
-        await interaction.response.defer()
-        s = await W.summary(self.bot.db, interaction.guild_id, m.id)
-        img = WR.level_card(m.display_name, await self._avatar(m), s)
-        await interaction.followup.send(file=discord.File(img, "nivel.png"))
-
-    @app_commands.command(name="trabajadores", description="Ranking de los mejores trabajadores")
-    @app_commands.describe(orden="Cómo ordenar el ranking")
-    @app_commands.choices(orden=[
-        app_commands.Choice(name="Nivel / XP", value="xp"),
-        app_commands.Choice(name="Dinero ganado", value="earned"),
-        app_commands.Choice(name="Trabajos hechos", value="works"),
-        app_commands.Choice(name="Tareas resueltas", value="tasks"),
-        app_commands.Choice(name="Mejor racha de tareas", value="best_streak"),
-    ])
-    @app_commands.guild_only()
-    async def trabajadores(self, interaction: discord.Interaction, orden: app_commands.Choice[str] | None = None):
-        key = orden.value if orden else "xp"
-        names = {"xp": "Nivel / XP", "earned": "Dinero ganado", "works": "Trabajos", "tasks": "Tareas", "best_streak": "Mejor racha"}
-        gid, uid = interaction.guild_id, interaction.user.id
-        await interaction.response.defer()
-        db = self.bot.db
-        rows = await db.fetchall(
-            f"SELECT * FROM work_stats WHERE guild_id = ? AND {key} > 0 ORDER BY {key} DESC, xp DESC LIMIT 10", (gid,)
-        )
-        members = [interaction.guild.get_member(r["user_id"]) for r in rows]
-        avatars = await asyncio.gather(*[self._avatar(m) if m else asyncio.sleep(0) for m in members])
-        out = []
-        for r, m, av in zip(rows, members, avatars):
-            val = {"xp": f"{fmt(r['xp'])} XP", "earned": f"{fmt(r['earned'])} {COIN}", "works": f"{r['works']} trabajos",
-                   "tasks": f"{r['tasks']} tareas", "best_streak": f"🔥 {r['best_streak']}"}[key]
-            out.append({
-                "name": m.display_name if m else f"Usuario {r['user_id']}", "avatar": av, "xp": r["xp"], "value": val,
-                "sub": f"{r['works']} trabajos • {r['tasks']} tareas • {fmt(r['earned'])} ganados",
-            })
-        mine = await W.get_stats(db, gid, uid)
-        pos = (await db.fetchone(f"SELECT COUNT(*) + 1 AS p FROM work_stats WHERE guild_id = ? AND {key} > ?", (gid, mine[key])))["p"]
-        me = {"text": f"Tu puesto: #{pos}  •  {fmt(mine[key])} {names[key].lower()}"} if mine[key] > 0 else {"text": "Todavía no figurás. ¡Usá /trabajar o /tarea!"}
-        img = WR.ranking_card(f"🏆 Trabajadores · {names[key]}".replace("🏆 ", ""), out, me)
-        await interaction.followup.send(file=discord.File(img, "ranking.png"))
+    async def tarea2(self, interaction: discord.Interaction):
+        await self._task_cmd(interaction, "tarea2")
 
     @app_commands.command(name="pay", description="Mandale monedas a otra persona")
     @app_commands.guild_only()

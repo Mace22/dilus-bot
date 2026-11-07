@@ -10,7 +10,7 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 | 🤖 **IA con Gemini** | `/ask`, `/olvidar`, `/traducir` y también charlás **mencionando al bot** (`@Dilu's Bot hola`). Recuerda la charla de cada persona |
 | 💘 **Match** | `/match usuario1 [usuario2]` → imagen con los dos avatares, corazón que se llena y % de compatibilidad (siempre da lo mismo para la misma pareja) |
 | 🃏 **Blackjack** | `/blackjack apuesta` → mesa con cartas en imagen que ve todo el chat. Botones **Pedir / Plantarse / Doblar**, el dealer se planta en 17, el Blackjack paga 3:2 y hay botón para jugar otra mano. Se juega con las monedas de la economía |
-| 🪙 **Economía** | `/balance`, `/daily` (con racha), `/trabajar`, `/pay`, `/ricos`, `/apostar`, `/slots`, `/tienda`, `/comprar`. Se ganan monedas también chateando |
+| 🪙 **Economía** | `/balance`, `/daily` (con racha), `/trabajar`, `/tarea1`, `/tarea2` (cada 1 min), `/pay`, `/ricos`, `/apostar`, `/slots`, `/tienda`, `/comprar`. Se ganan monedas también chateando |
 | ⚔️ **Duelo de cara o cruz** | `/caracruz duelo usuario monto lado`: desafiás a alguien, acepta con un botón (o desde el panel web) y el ganador se lleva todo. Si no responde en 2 minutos se te devuelve la apuesta |
 | 🎨 **Tags de colores** | `/tags lista\|comprar\|usar\|quitar`, admin: `/tags crear_roles`. 9 colores (Negro $10.000, Dorado $5.000 … Blanco $1.500) que el bot crea como roles. También se compran desde la sección **Tags** del panel web |
 | 🎙️ **Voz 24/7** | `/entrar` (entra a tu canal **silenciado y ensordecido** y se queda siempre; si algo lo saca, vuelve solo), `/salir` |
