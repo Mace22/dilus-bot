@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS economy (
     PRIMARY KEY (guild_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS work_stats (
+    guild_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    xp INTEGER NOT NULL DEFAULT 0,
+    works INTEGER NOT NULL DEFAULT 0,
+    tasks INTEGER NOT NULL DEFAULT 0,
+    earned INTEGER NOT NULL DEFAULT 0,
+    last_task REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS shop (
     guild_id INTEGER NOT NULL,
     role_id INTEGER NOT NULL,

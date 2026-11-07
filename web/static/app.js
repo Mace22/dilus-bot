@@ -376,13 +376,13 @@ VIEWS.inicio = async (root, token) => {
   });
   const w = p.work;
   const work = claimCard({
-    icon: "work", title: "Trabajar", desc: `Ganá entre ${fmt(w.min)} y ${fmt(w.max)} monedas cada ${fmtDur(w.cooldown)}.`, total: w.cooldown,
+    icon: "work", title: "Trabajar", desc: `Ganá ${fmt(w.min)}–${fmt(w.max)} monedas (+15% por nivel) cada ${fmtDur(w.cooldown)}. Tareas y ranking en Discord: /tarea, /trabajadores.`, total: w.cooldown,
     readyAt: () => w.ready_at, setReady: t => { w.ready_at = t; },
     label: () => "Ir a trabajar",
     claim: async card => {
       const r = await gpost("/api/claim/work");
       w.ready_at = r.ready_at; setBalance(r.balance); burst(card, `+${fmt(r.reward)}`); Sfx.coins(6); Fx.at(card.querySelector("button"), "coins", 12);
-      toast(`${r.job} Ganaste ${fmt(r.reward)} monedas.`, "gold");
+      toast(`${r.job} Ganaste ${fmt(r.reward)} monedas. Nivel ${r.level} (${r.title})${r.leveled ? " 🎉 ¡subiste de nivel!" : ""}`, "gold");
     },
   });
 

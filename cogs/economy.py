@@ -6,6 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils import adminlog
+from utils import work as W
 from utils.embeds import error, make_embed, ok
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
@@ -13,8 +14,6 @@ COIN = "🪙"
 DAILY_BASE = 200            # monedas del /daily
 DAILY_STREAK_BONUS = 25     # extra por cada día seguido
 DAILY_STREAK_CAP = 10       # tope de días para el bonus
-WORK_RANGE = (50, 150)      # monedas por /trabajar
-WORK_COOLDOWN = 3600        # segundos entre /trabajar
 CHAT_COINS = (1, 3)         # monedas por mensaje (con cooldown)
 CHAT_COOLDOWN = 60
 NO_LIMIT = 2**53 - 1       # "sin máximo" (es el tope que acepta Discord para un número entero)
@@ -39,6 +38,37 @@ SLOT_PAIR_MULT = 1.4
 
 def fmt(n: int) -> str:
     return f"{n:,}".replace(",", ".")
+
+
+class TaskModal(discord.ui.Modal, title="Tarea"):
+    respuesta = discord.ui.TextInput(label="Tu respuesta", max_length=40)
+
+    def __init__(self, cog, answer: str):
+        super().__init__()
+        self.cog, self.answer = cog, answer
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not W.check(self.respuesta.value, self.answer):
+            return await interaction.response.send_message(embed=error(f"Incorrecto. La respuesta era **{self.answer}**."), ephemeral=True)
+        r = await W.finish_task(self.cog.bot.db, interaction.guild_id, interaction.user.id)
+        msg = f"¡Correcto! Ganaste **{fmt(r['reward'])}** {COIN}"
+        if r["leveled"]:
+            msg += f"\n🎉 ¡Subiste a **{r['title']}** (nivel {r['level']})!"
+        await interaction.response.send_message(embed=ok(msg))
+
+
+class TaskView(discord.ui.View):
+    def __init__(self, cog, uid: int, answer: str):
+        super().__init__(timeout=60)
+        self.cog, self.uid, self.answer, self.done = cog, uid, answer, False
+
+    @discord.ui.button(label="Responder", style=discord.ButtonStyle.primary, emoji="✏️")
+    async def reply(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.uid or self.done:
+            return await interaction.response.send_message(embed=error("Esta tarea ya no está disponible."), ephemeral=True)
+        self.done = True
+        self.stop()
+        await interaction.response.send_modal(TaskModal(self.cog, self.answer))
 
 
 class Economy(commands.Cog):
@@ -125,25 +155,72 @@ class Economy(commands.Cog):
             embed=ok(f"Recibiste **{fmt(reward)}** {COIN}  •  Racha: **{streak}** día(s) 🔥")
         )
 
-    @app_commands.command(name="trabajar", description="Trabajá un rato para ganar monedas")
+    @app_commands.command(name="trabajar", description="Trabajá un rato para ganar monedas (subí de nivel para ganar más)")
     @app_commands.guild_only()
     async def trabajar(self, interaction: discord.Interaction):
         gid, uid = interaction.guild_id, interaction.user.id
-        row = await self.get_row(gid, uid)
-        now = time.time()
-        last = row["last_work"]
-        if now - last < WORK_COOLDOWN:
+        await self._ensure(gid, uid)
+        status, data = await W.do_work(self.bot.db, gid, uid)
+        if status == "cooldown":
             return await interaction.response.send_message(
-                embed=error(f"Estás cansado. Podés volver a trabajar <t:{int(last + WORK_COOLDOWN)}:R>."), ephemeral=True
+                embed=error(f"Estás cansado. Podés volver a trabajar <t:{int(data)}:R>."), ephemeral=True
             )
-        reward = random.randint(*WORK_RANGE)
-        cur = await self.bot.db.execute(
-            "UPDATE economy SET balance = balance + ?, last_work = ? WHERE guild_id = ? AND user_id = ? AND last_work = ?",
-            (reward, now, gid, uid, last),
-        )
-        if cur.rowcount == 0:
+        if status == "busy":
             return await interaction.response.send_message(embed=error("Ya estás trabajando."), ephemeral=True)
-        await interaction.response.send_message(embed=ok(f"{random.choice(JOBS).capitalize()} y ganaste **{fmt(reward)}** {COIN}"))
+        msg = f"{random.choice(JOBS).capitalize()} y ganaste **{fmt(data['reward'])}** {COIN}  •  Nivel **{data['level']}** ({data['title']})"
+        if data["leveled"]:
+            msg += f"\n🎉 ¡Subiste a **{data['title']}**! Ahora ganás **+{int(W.LEVEL_BONUS * 100 * (data['level'] - 1))}%** por trabajo."
+        await interaction.response.send_message(embed=ok(msg))
+
+    @app_commands.command(name="tarea", description="Resolvé un puzzle rápido para ganar un extra de monedas")
+    @app_commands.guild_only()
+    async def tarea(self, interaction: discord.Interaction):
+        gid, uid = interaction.guild_id, interaction.user.id
+        await self._ensure(gid, uid)
+        status, ready = await W.start_task(self.bot.db, gid, uid)
+        if status == "cooldown":
+            return await interaction.response.send_message(
+                embed=error(f"Todavía no hay tareas nuevas. Volvé <t:{int(ready)}:R>."), ephemeral=True
+            )
+        question, answer = W.make_puzzle()
+        view = TaskView(self, uid, answer)
+        await interaction.response.send_message(
+            embed=make_embed(title="📋 Tarea", description=f"{question}\n\nTenés **60 segundos**."), view=view, ephemeral=True
+        )
+
+    @app_commands.command(name="nivel-trabajo", description="Mirá tu nivel de trabajo y tu progreso")
+    @app_commands.guild_only()
+    async def nivel_trabajo(self, interaction: discord.Interaction, miembro: discord.Member | None = None):
+        m = miembro or interaction.user
+        st = await W.get_stats(self.bot.db, interaction.guild_id, m.id)
+        lvl = W.level_of(st["xp"])
+        cur, need = W.progress(st["xp"])
+        bar = "▰" * 10 if need is None else "▰" * int(10 * cur / need) + "▱" * (10 - int(10 * cur / need))
+        nxt = "Nivel máximo 👑" if need is None else f"{cur}/{need} XP para **{W.title_of(lvl + 1)}**"
+        await interaction.response.send_message(embed=make_embed(
+            title=f"💼 {m.display_name} — Nivel {lvl} ({W.title_of(lvl)})",
+            description=f"{bar}\n{nxt}\n\nBono de paga: **+{int(W.LEVEL_BONUS * 100 * (lvl - 1))}%**\n"
+                        f"Trabajos: **{st['works']}** • Tareas: **{st['tasks']}**\nTotal ganado: **{fmt(st['earned'])}** {COIN}",
+        ))
+
+    @app_commands.command(name="trabajadores", description="Ranking de los mejores trabajadores")
+    @app_commands.guild_only()
+    async def trabajadores(self, interaction: discord.Interaction):
+        rows = await self.bot.db.fetchall(
+            "SELECT user_id, xp, earned FROM work_stats WHERE guild_id = ? AND xp > 0 ORDER BY xp DESC, earned DESC LIMIT 10",
+            (interaction.guild_id,),
+        )
+        if not rows:
+            return await interaction.response.send_message(embed=error("Todavía nadie trabajó."))
+        medals = ["🥇", "🥈", "🥉"]
+        lines = [
+            f"{medals[i] if i < 3 else f'`{i + 1}.`'} <@{r['user_id']}> — Nv **{W.level_of(r['xp'])}** {W.title_of(W.level_of(r['xp']))} • {fmt(r['earned'])} {COIN}"
+            for i, r in enumerate(rows)
+        ]
+        await interaction.response.send_message(
+            embed=make_embed(title="🏆 Mejores trabajadores", description="\n".join(lines)),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     @app_commands.command(name="pay", description="Mandale monedas a otra persona")
     @app_commands.guild_only()

@@ -8,7 +8,8 @@ from collections import defaultdict, deque
 import discord
 
 from cogs import blackjack as bj
-from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, JOBS, SLOT_MULT, SLOT_PAIR_MULT, SLOT_SYMBOLS, WORK_COOLDOWN, WORK_RANGE
+from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, JOBS, SLOT_MULT, SLOT_PAIR_MULT, SLOT_SYMBOLS
+from utils import work as W
 from cogs.economy import MAX_BET as SL_MAX_BET
 from cogs.economy import MIN_BET as SL_MIN_BET
 from cogs.levels import level_from_xp
@@ -146,7 +147,7 @@ class Services:
                 "next_reward": DAILY_BASE + min(next_streak - 1, DAILY_STREAK_CAP) * DAILY_STREAK_BONUS,
                 "base": DAILY_BASE, "bonus": DAILY_STREAK_BONUS, "cap": DAILY_STREAK_CAP,
             },
-            "work": {"ready_at": row["last_work"] + WORK_COOLDOWN if row["last_work"] else 0, "min": WORK_RANGE[0], "max": WORK_RANGE[1], "cooldown": WORK_COOLDOWN},
+            "work": {"ready_at": row["last_work"] + W.WORK_COOLDOWN if row["last_work"] else 0, "min": W.WORK_BASE[0], "max": W.WORK_BASE[1], "cooldown": W.WORK_COOLDOWN},
             "casino": casino,
             "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET, "sl_min": SL_MIN_BET, "sl_max": SL_MAX_BET, "cf_min": SL_MIN_BET, "cf_max": SL_MAX_BET, "pay_max": PAY_MAX},
             "slots": {"symbols": SLOT_SYMBOLS, "mult": SLOT_MULT, "pair": SLOT_PAIR_MULT},
@@ -173,18 +174,12 @@ class Services:
 
     async def claim_work(self, gid: int, uid: int) -> dict:
         async with self._locks[(gid, uid)]:
-            row = await self.eco.get_row(gid, uid)
-            now, last = time.time(), row["last_work"]
-            if now - last < WORK_COOLDOWN:
-                raise ApiError("Estás cansado, volvé más tarde.", 409, ready_at=last + WORK_COOLDOWN)
-            reward = random.randint(*WORK_RANGE)
-            cur = await self.db.execute(
-                "UPDATE economy SET balance = balance + ?, last_work = ? WHERE guild_id = ? AND user_id = ? AND last_work = ?",
-                (reward, now, gid, uid, last),
-            )
-            if cur.rowcount == 0:
+            status, data = await W.do_work(self.db, gid, uid)
+            if status == "cooldown":
+                raise ApiError("Estás cansado, volvé más tarde.", 409, ready_at=data)
+            if status == "busy":
                 raise ApiError("Ya estás trabajando.", 409)
-            return {"reward": reward, "job": random.choice(JOBS), "ready_at": now + WORK_COOLDOWN, "balance": await self.eco.balance(gid, uid)}
+            return {**data, "job": random.choice(JOBS), "balance": await self.eco.balance(gid, uid)}
 
     # ------------------------------------------------------------------
     # Tienda de roles
