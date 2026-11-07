@@ -374,15 +374,64 @@ VIEWS.inicio = async (root, token) => {
       toast(`¡Reclamaste ${fmt(r.reward)} monedas! Racha de ${r.streak} día${r.streak === 1 ? "" : "s"} 🔥`, "gold");
     },
   });
-  const w = p.work;
+  const w = p.work, wi = p.work_info;
+  const lvlTxt = h("small", { class: "note" }), lvlBar = h("i");
+  const paintWork = () => {
+    const f = wi.xp_need ? Math.min(1, wi.xp_in / wi.xp_need) : 1;
+    lvlBar.style.width = Math.max(3, f * 100) + "%";
+    lvlTxt.textContent = `💼 Nivel ${wi.level} · ${wi.title} · +${wi.bonus}% de paga · ` + (wi.xp_need ? `${wi.xp_in}/${wi.xp_need} XP para ${wi.next_title}` : "nivel máximo");
+  };
+  paintWork();
   const work = claimCard({
-    icon: "work", title: "Trabajar", desc: `Ganá ${fmt(w.min)}–${fmt(w.max)} monedas (+15% por nivel) cada ${fmtDur(w.cooldown)}. Tareas y ranking en Discord: /tarea, /trabajadores.`, total: w.cooldown,
+    icon: "work", title: "Trabajar", desc: `Ganá ${fmt(w.min)}–${fmt(w.max)} monedas (+15% por nivel) cada ${fmtDur(w.cooldown)}.`, total: w.cooldown,
+    extra: h("div", {}, lvlTxt, h("div", { class: "bar", style: { margin: "6px 0 10px" } }, lvlBar)),
     readyAt: () => w.ready_at, setReady: t => { w.ready_at = t; },
     label: () => "Ir a trabajar",
     claim: async card => {
       const r = await gpost("/api/claim/work");
-      w.ready_at = r.ready_at; setBalance(r.balance); burst(card, `+${fmt(r.reward)}`); Sfx.coins(6); Fx.at(card.querySelector("button"), "coins", 12);
-      toast(`${r.job} Ganaste ${fmt(r.reward)} monedas. Nivel ${r.level} (${r.title})${r.leveled ? " 🎉 ¡subiste de nivel!" : ""}`, "gold");
+      w.ready_at = r.ready_at; Object.assign(wi, r.info); paintWork();
+      setBalance(r.balance); burst(card, `+${fmt(r.reward)}`); Sfx.coins(6); Fx.at(card.querySelector("button"), "coins", 12);
+      toast(`${r.event ? r.event + " " : ""}${r.job} Ganaste ${fmt(r.reward)} monedas.${r.leveled ? ` 🎉 ¡Subiste a ${r.title}!` : ""}`, "gold");
+    },
+  });
+
+  /* tareas (puzzles) */
+  const qBox = h("div", { style: { margin: "4px 0 10px" } });
+  const streakTxt = h("small", { class: "note" });
+  const paintStreak2 = () => { streakTxt.textContent = `🧩 ${wi.tasks} tareas hechas · 🔥 racha ${wi.streak} (mejor ${wi.best_streak}) · bonus por racha hasta +50%`; };
+  paintStreak2();
+  const task = claimCard({
+    icon: "work", title: "Tarea (puzzle)", desc: `Resolvé un puzzle y ganá un extra. Disponible cada ${fmtDur(wi.task_cooldown)}.`, total: wi.task_cooldown,
+    extra: h("div", {}, streakTxt, qBox),
+    readyAt: () => wi.task_ready_at, setReady: t => { wi.task_ready_at = t; },
+    label: () => "Pedir tarea",
+    claim: async () => {
+      const r = await gpost("/api/task/start");
+      wi.task_ready_at = Date.now() / 1000 + wi.task_cooldown;
+      const inp = h("input", { type: "text", maxlength: "40", placeholder: "Tu respuesta…", autocomplete: "off", style: { flex: "1", minWidth: "0", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line, #333)", background: "transparent", color: "inherit" } });
+      const send = h("button", { class: "btn btn-primary", text: "Enviar" });
+      const done = () => { inp.disabled = true; send.disabled = true; };
+      const submit = async () => {
+        if (send.disabled) return;
+        send.disabled = true;
+        try {
+          const a = await gpost("/api/task/answer", { answer: inp.value });
+          Object.assign(wi, a.info); wi.task_ready_at = a.info.task_ready_at; paintWork(); paintStreak2(); done();
+          if (a.correct) {
+            setBalance(a.balance); Sfx.coins(6);
+            qBox.replaceChildren(h("b", { text: `✅ ¡Correcto! +${fmt(a.reward)} monedas · racha ${a.streak}${a.bonus ? ` (+${a.bonus}%)` : ""}${a.leveled ? ` · 🎉 ¡${a.title}!` : ""}` }));
+            toast(`¡Correcto! Ganaste ${fmt(a.reward)} monedas.`, "gold");
+          } else {
+            qBox.replaceChildren(h("b", { text: `❌ Incorrecto. Era: ${a.answer}. Perdiste la racha.` }));
+            toast("Respuesta incorrecta", "err");
+          }
+        } catch (e) { done(); qBox.replaceChildren(h("b", { text: e.message })); toast(e.message, "err"); }
+      };
+      send.addEventListener("click", submit);
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
+      qBox.replaceChildren(h("p", { style: { margin: "0 0 8px", fontWeight: "600" }, text: r.question }), h("div", { style: { display: "flex", gap: "8px" } }, inp, send));
+      inp.focus();
+      setTimeout(() => { if (!send.disabled) { done(); qBox.replaceChildren(h("b", { text: "⏰ Se acabó el tiempo." })); } }, (r.seconds + 5) * 1000);
     },
   });
 
@@ -418,8 +467,8 @@ VIEWS.inicio = async (root, token) => {
   const play = (id, big, title, text) => h("a", { class: "card tile-link", href: `#/${id}` }, h("div", { class: "big", text: big }), h("div", {}, h("h3", { text: title }), h("p", { class: "muted", text })));
 
   root.replaceChildren(hero,
-    h("div", { class: "sec-title" }, h("h2", { text: "Recompensas" }), h("span", { text: "Reclamalas desde acá o con /daily y /trabajar" })),
-    h("div", { class: "grid g2" }, daily, work),
+    h("div", { class: "sec-title" }, h("h2", { text: "Recompensas" }), h("span", { text: "Reclamalas desde acá o con /daily, /trabajar y /tarea" })),
+    h("div", { class: "grid g2" }, daily, work, task),
     h("div", { class: "sec-title" }, h("h2", { text: "Tus estadísticas" }), h("span", { text: "Salen de tu actividad en Discord" })),
     h("div", { class: "grid g2 split-a" }, levelCard, stats),
     h("div", { class: "sec-title" }, h("h2", { text: "Casino" })),
@@ -467,17 +516,18 @@ VIEWS.ranking = async (root, token, kind = "eco") => {
   if (!alive(token)) return;
   const tabs = h("div", { class: "tabs" },
     h("button", { class: kind === "eco" ? "on" : "", text: "🪙 Más ricos", onclick: () => VIEWS.ranking(root, token, "eco") }),
-    h("button", { class: kind === "xp" ? "on" : "", text: "⭐ Niveles", onclick: () => VIEWS.ranking(root, token, "xp") }));
+    h("button", { class: kind === "xp" ? "on" : "", text: "⭐ Niveles", onclick: () => VIEWS.ranking(root, token, "xp") }),
+    h("button", { class: kind === "work" ? "on" : "", text: "💼 Trabajadores", onclick: () => VIEWS.ranking(root, token, "work") }));
   const medals = ["🥇", "🥈", "🥉"];
   const rows = data.entries.map((e, i) => h("div", { class: `rank-row ${e.id === S.user.id ? "me" : ""}` },
     h("div", { class: "rank-pos", text: medals[i] || String(i + 1) }),
     e.avatar ? h("img", { class: "avatar", src: e.avatar, alt: "" }) : h("div", { class: "avatar" }),
     h("div", { class: "rank-name" }, e.name, e.sub ? h("small", { text: e.sub }) : null),
-    h("div", { class: "rank-val", text: kind === "xp" ? `Nivel ${e.level} · ${fmt(e.value)} XP` : `${fmt(e.value)} 🪙` })));
+    h("div", { class: "rank-val", text: kind === "work" ? `Nv ${e.level} ${e.title} · ${fmt(e.value)} XP` : kind === "xp" ? `Nivel ${e.level} · ${fmt(e.value)} XP` : `${fmt(e.value)} 🪙` })));
   const me = data.me;
   root.replaceChildren(sectionTitle("Ranking", `Los mejores de ${guildName()}.`), tabs,
     rows.length ? h("div", { class: "card" }, rows) : h("div", { class: "card empty" }, h("div", { class: "big", text: "🏆" }), h("p", { text: "Todavía no hay nadie en este ranking." })),
-    h("p", { class: "note", style: { marginTop: "14px", textAlign: "center" }, text: me.position ? `Tu puesto: #${me.position} · ${fmt(me.value)} ${kind === "xp" ? "XP" : "monedas"}` : "Todavía no figurás en este ranking." }));
+    h("p", { class: "note", style: { marginTop: "14px", textAlign: "center" }, text: me.position ? `Tu puesto: #${me.position} · ${fmt(me.value)} ${kind === "xp" || kind === "work" ? "XP" : "monedas"}` : "Todavía no figurás en este ranking." }));
 };
 
 /* ============================================================

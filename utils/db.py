@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS work_stats (
     tasks INTEGER NOT NULL DEFAULT 0,
     earned INTEGER NOT NULL DEFAULT 0,
     last_task REAL NOT NULL DEFAULT 0,
+    streak INTEGER NOT NULL DEFAULT 0,
+    best_streak INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id)
 );
 
@@ -229,6 +231,12 @@ class Database:
         for column, col_type in MIGRATIONS.items():
             if column not in existing:
                 await self.conn.execute(f"ALTER TABLE guild_settings ADD COLUMN {column} {col_type}")
+
+        async with self.conn.execute("PRAGMA table_info(work_stats)") as cur:
+            have = {row["name"] for row in await cur.fetchall()}
+        for column in ("streak", "best_streak"):
+            if column not in have:
+                await self.conn.execute(f"ALTER TABLE work_stats ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
 
     async def close(self):
         if self.conn:

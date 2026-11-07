@@ -36,6 +36,7 @@ class Services:
         self.games: dict[tuple[int, int], dict] = {}      # manos de blackjack en juego
         self.expired: dict[tuple[int, int], tuple[float, dict]] = {}   # manos cerradas por inactividad
         self._own_history: dict[int, deque] = {}
+        self._tasks: dict[tuple[int, int], tuple[str, float]] = {}
         self._locks: dict[tuple[int, int], asyncio.Lock] = defaultdict(asyncio.Lock)
         self._who: dict[int, tuple[float, tuple[str, str | None]]] = {}
         self.admin = Admin(self)
@@ -147,6 +148,7 @@ class Services:
                 "next_reward": DAILY_BASE + min(next_streak - 1, DAILY_STREAK_CAP) * DAILY_STREAK_BONUS,
                 "base": DAILY_BASE, "bonus": DAILY_STREAK_BONUS, "cap": DAILY_STREAK_CAP,
             },
+            "work_info": await W.summary(self.db, gid, uid),
             "work": {"ready_at": row["last_work"] + W.WORK_COOLDOWN if row["last_work"] else 0, "min": W.WORK_BASE[0], "max": W.WORK_BASE[1], "cooldown": W.WORK_COOLDOWN},
             "casino": casino,
             "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET, "sl_min": SL_MIN_BET, "sl_max": SL_MAX_BET, "cf_min": SL_MIN_BET, "cf_max": SL_MAX_BET, "pay_max": PAY_MAX},
@@ -179,7 +181,27 @@ class Services:
                 raise ApiError("Estás cansado, volvé más tarde.", 409, ready_at=data)
             if status == "busy":
                 raise ApiError("Ya estás trabajando.", 409)
-            return {**data, "job": random.choice(JOBS), "balance": await self.eco.balance(gid, uid)}
+            return {**data, "job": random.choice(JOBS), "balance": await self.eco.balance(gid, uid), "info": await W.summary(self.db, gid, uid)}
+
+    async def task_start(self, gid: int, uid: int) -> dict:
+        async with self._locks[(gid, uid)]:
+            status, ready = await W.start_task(self.db, gid, uid)
+            if status == "cooldown":
+                raise ApiError("Todavía no hay tareas nuevas.", 409, ready_at=ready)
+            q, a = W.make_puzzle()
+            self._tasks[(gid, uid)] = (a, time.time() + 75)
+            return {"question": q.replace("**", ""), "seconds": 60}
+
+    async def task_answer(self, gid: int, uid: int, answer) -> dict:
+        async with self._locks[(gid, uid)]:
+            pend = self._tasks.pop((gid, uid), None)
+            if not pend or time.time() > pend[1]:
+                raise ApiError("No tenés una tarea activa (o se agotó el tiempo).", 409)
+            if not W.check(str(answer or "")[:60], pend[0]):
+                await W.fail_task(self.db, gid, uid)
+                return {"correct": False, "answer": pend[0], "info": await W.summary(self.db, gid, uid)}
+            r = await W.finish_task(self.db, gid, uid)
+            return {"correct": True, **r, "balance": await self.eco.balance(gid, uid), "info": await W.summary(self.db, gid, uid)}
 
     # ------------------------------------------------------------------
     # Tienda de roles
@@ -276,6 +298,11 @@ class Services:
             mine = await self.db.fetchone("SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?", (gid, uid))
             my_value = mine["xp"] if mine else 0
             my_pos = (await self.db.fetchone("SELECT COUNT(*) + 1 AS p FROM levels WHERE guild_id = ? AND xp > ?", (gid, my_value)))["p"] if mine else None
+        elif kind == "work":
+            rows = await self.db.fetchall("SELECT * FROM work_stats WHERE guild_id = ? AND xp > 0 ORDER BY xp DESC, earned DESC LIMIT 10", (gid,))
+            mine = await W.get_stats(self.db, gid, uid)
+            my_value = mine["xp"]
+            my_pos = (await self.db.fetchone("SELECT COUNT(*) + 1 AS p FROM work_stats WHERE guild_id = ? AND xp > ?", (gid, my_value)))["p"] if my_value else None
         else:
             kind = "eco"
             rows = await self.db.fetchall("SELECT user_id, balance FROM economy WHERE guild_id = ? AND balance > 0 ORDER BY balance DESC LIMIT 10", (gid,))
@@ -285,7 +312,11 @@ class Services:
         entries = []
         for r in rows:
             name, avatar = await self.who(guild, r["user_id"])
-            if kind == "xp":
+            if kind == "work":
+                lv = W.level_of(r["xp"])
+                entries.append({"id": str(r["user_id"]), "name": name, "avatar": avatar, "value": r["xp"], "level": lv, "title": W.title_of(lv),
+                                "sub": f"{r['works']} trabajos · {r['tasks']} tareas · {r['earned']:,} 🪙 ganados".replace(",", ".")})
+            elif kind == "xp":
                 level = level_from_xp(r["xp"])[0]
                 entries.append({"id": str(r["user_id"]), "name": name, "avatar": avatar, "value": r["xp"], "level": level, "sub": f"{r['messages']} mensajes"})
             else:

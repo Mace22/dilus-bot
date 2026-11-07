@@ -1,3 +1,4 @@
+import asyncio
 import random
 import time
 
@@ -7,6 +8,7 @@ from discord.ext import commands
 
 from utils import adminlog
 from utils import work as W
+from utils import work_render as WR
 from utils.embeds import error, make_embed, ok
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
@@ -49,9 +51,10 @@ class TaskModal(discord.ui.Modal, title="Tarea"):
 
     async def on_submit(self, interaction: discord.Interaction):
         if not W.check(self.respuesta.value, self.answer):
-            return await interaction.response.send_message(embed=error(f"Incorrecto. La respuesta era **{self.answer}**."), ephemeral=True)
+            await W.fail_task(self.cog.bot.db, interaction.guild_id, interaction.user.id)
+            return await interaction.response.send_message(embed=error(f"Incorrecto. La respuesta era **{self.answer}**. Perdiste tu racha 💔"), ephemeral=True)
         r = await W.finish_task(self.cog.bot.db, interaction.guild_id, interaction.user.id)
-        msg = f"¡Correcto! Ganaste **{fmt(r['reward'])}** {COIN}"
+        msg = f"¡Correcto! Ganaste **{fmt(r['reward'])}** {COIN}  •  Racha: **{r['streak']}** 🔥" + (f" (+{r['bonus']}%)" if r["bonus"] else "")
         if r["leveled"]:
             msg += f"\n🎉 ¡Subiste a **{r['title']}** (nivel {r['level']})!"
         await interaction.response.send_message(embed=ok(msg))
@@ -168,6 +171,8 @@ class Economy(commands.Cog):
         if status == "busy":
             return await interaction.response.send_message(embed=error("Ya estás trabajando."), ephemeral=True)
         msg = f"{random.choice(JOBS).capitalize()} y ganaste **{fmt(data['reward'])}** {COIN}  •  Nivel **{data['level']}** ({data['title']})"
+        if data["event"]:
+            msg = f"{data['event']}\n" + msg
         if data["leveled"]:
             msg += f"\n🎉 ¡Subiste a **{data['title']}**! Ahora ganás **+{int(W.LEVEL_BONUS * 100 * (data['level'] - 1))}%** por trabajo."
         await interaction.response.send_message(embed=ok(msg))
@@ -188,39 +193,55 @@ class Economy(commands.Cog):
             embed=make_embed(title="📋 Tarea", description=f"{question}\n\nTenés **60 segundos**."), view=view, ephemeral=True
         )
 
-    @app_commands.command(name="nivel-trabajo", description="Mirá tu nivel de trabajo y tu progreso")
+    async def _avatar(self, member) -> bytes | None:
+        try:
+            return await member.display_avatar.replace(size=128, format="png").read()
+        except Exception:
+            return None
+
+    @app_commands.command(name="nivel-trabajo", description="Tu tarjeta de nivel de trabajo")
     @app_commands.guild_only()
     async def nivel_trabajo(self, interaction: discord.Interaction, miembro: discord.Member | None = None):
         m = miembro or interaction.user
-        st = await W.get_stats(self.bot.db, interaction.guild_id, m.id)
-        lvl = W.level_of(st["xp"])
-        cur, need = W.progress(st["xp"])
-        bar = "▰" * 10 if need is None else "▰" * int(10 * cur / need) + "▱" * (10 - int(10 * cur / need))
-        nxt = "Nivel máximo 👑" if need is None else f"{cur}/{need} XP para **{W.title_of(lvl + 1)}**"
-        await interaction.response.send_message(embed=make_embed(
-            title=f"💼 {m.display_name} — Nivel {lvl} ({W.title_of(lvl)})",
-            description=f"{bar}\n{nxt}\n\nBono de paga: **+{int(W.LEVEL_BONUS * 100 * (lvl - 1))}%**\n"
-                        f"Trabajos: **{st['works']}** • Tareas: **{st['tasks']}**\nTotal ganado: **{fmt(st['earned'])}** {COIN}",
-        ))
+        await interaction.response.defer()
+        s = await W.summary(self.bot.db, interaction.guild_id, m.id)
+        img = WR.level_card(m.display_name, await self._avatar(m), s)
+        await interaction.followup.send(file=discord.File(img, "nivel.png"))
 
     @app_commands.command(name="trabajadores", description="Ranking de los mejores trabajadores")
+    @app_commands.describe(orden="Cómo ordenar el ranking")
+    @app_commands.choices(orden=[
+        app_commands.Choice(name="Nivel / XP", value="xp"),
+        app_commands.Choice(name="Dinero ganado", value="earned"),
+        app_commands.Choice(name="Trabajos hechos", value="works"),
+        app_commands.Choice(name="Tareas resueltas", value="tasks"),
+        app_commands.Choice(name="Mejor racha de tareas", value="best_streak"),
+    ])
     @app_commands.guild_only()
-    async def trabajadores(self, interaction: discord.Interaction):
-        rows = await self.bot.db.fetchall(
-            "SELECT user_id, xp, earned FROM work_stats WHERE guild_id = ? AND xp > 0 ORDER BY xp DESC, earned DESC LIMIT 10",
-            (interaction.guild_id,),
+    async def trabajadores(self, interaction: discord.Interaction, orden: app_commands.Choice[str] | None = None):
+        key = orden.value if orden else "xp"
+        names = {"xp": "Nivel / XP", "earned": "Dinero ganado", "works": "Trabajos", "tasks": "Tareas", "best_streak": "Mejor racha"}
+        gid, uid = interaction.guild_id, interaction.user.id
+        await interaction.response.defer()
+        db = self.bot.db
+        rows = await db.fetchall(
+            f"SELECT * FROM work_stats WHERE guild_id = ? AND {key} > 0 ORDER BY {key} DESC, xp DESC LIMIT 10", (gid,)
         )
-        if not rows:
-            return await interaction.response.send_message(embed=error("Todavía nadie trabajó."))
-        medals = ["🥇", "🥈", "🥉"]
-        lines = [
-            f"{medals[i] if i < 3 else f'`{i + 1}.`'} <@{r['user_id']}> — Nv **{W.level_of(r['xp'])}** {W.title_of(W.level_of(r['xp']))} • {fmt(r['earned'])} {COIN}"
-            for i, r in enumerate(rows)
-        ]
-        await interaction.response.send_message(
-            embed=make_embed(title="🏆 Mejores trabajadores", description="\n".join(lines)),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        members = [interaction.guild.get_member(r["user_id"]) for r in rows]
+        avatars = await asyncio.gather(*[self._avatar(m) if m else asyncio.sleep(0) for m in members])
+        out = []
+        for r, m, av in zip(rows, members, avatars):
+            val = {"xp": f"{fmt(r['xp'])} XP", "earned": f"{fmt(r['earned'])} {COIN}", "works": f"{r['works']} trabajos",
+                   "tasks": f"{r['tasks']} tareas", "best_streak": f"🔥 {r['best_streak']}"}[key]
+            out.append({
+                "name": m.display_name if m else f"Usuario {r['user_id']}", "avatar": av, "xp": r["xp"], "value": val,
+                "sub": f"{r['works']} trabajos • {r['tasks']} tareas • {fmt(r['earned'])} ganados",
+            })
+        mine = await W.get_stats(db, gid, uid)
+        pos = (await db.fetchone(f"SELECT COUNT(*) + 1 AS p FROM work_stats WHERE guild_id = ? AND {key} > ?", (gid, mine[key])))["p"]
+        me = {"text": f"Tu puesto: #{pos}  •  {fmt(mine[key])} {names[key].lower()}"} if mine[key] > 0 else {"text": "Todavía no figurás. ¡Usá /trabajar o /tarea!"}
+        img = WR.ranking_card(f"🏆 Trabajadores · {names[key]}".replace("🏆 ", ""), out, me)
+        await interaction.followup.send(file=discord.File(img, "ranking.png"))
 
     @app_commands.command(name="pay", description="Mandale monedas a otra persona")
     @app_commands.guild_only()
