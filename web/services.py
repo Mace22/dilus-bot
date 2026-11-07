@@ -36,7 +36,7 @@ class Services:
         self.games: dict[tuple[int, int], dict] = {}      # manos de blackjack en juego
         self.expired: dict[tuple[int, int], tuple[float, dict]] = {}   # manos cerradas por inactividad
         self._own_history: dict[int, deque] = {}
-        self._tasks: dict[tuple[int, int], tuple[str, float]] = {}
+        self._tasks: dict[tuple[int, int], tuple] = {}
         self._locks: dict[tuple[int, int], asyncio.Lock] = defaultdict(asyncio.Lock)
         self._who: dict[int, tuple[float, tuple[str, str | None]]] = {}
         self.admin = Admin(self)
@@ -188,9 +188,10 @@ class Services:
             status, ready = await W.start_task(self.db, gid, uid)
             if status == "cooldown":
                 raise ApiError("Todavía no hay tareas nuevas.", 409, ready_at=ready)
-            q, a = W.make_puzzle()
-            self._tasks[(gid, uid)] = (a, time.time() + 75)
-            return {"question": q.replace("**", ""), "seconds": 60}
+            spec, a = W.new_task()
+            spec = {**spec, "prompt": spec["prompt"].replace("**", "")}
+            self._tasks[(gid, uid)] = (a, time.time() + 75 + spec.get("preview_s", 0), spec["mult"])
+            return {"spec": spec, "seconds": 60}
 
     async def task_answer(self, gid: int, uid: int, answer) -> dict:
         async with self._locks[(gid, uid)]:
@@ -200,7 +201,7 @@ class Services:
             if not W.check(str(answer or "")[:60], pend[0]):
                 await W.fail_task(self.db, gid, uid)
                 return {"correct": False, "answer": pend[0], "info": await W.summary(self.db, gid, uid)}
-            r = await W.finish_task(self.db, gid, uid)
+            r = await W.finish_task(self.db, gid, uid, pend[2])
             return {"correct": True, **r, "balance": await self.eco.balance(gid, uid), "info": await W.summary(self.db, gid, uid)}
 
     # ------------------------------------------------------------------

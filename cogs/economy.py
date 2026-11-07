@@ -60,6 +60,48 @@ class TaskModal(discord.ui.Modal, title="Tarea"):
         await interaction.response.send_message(embed=ok(msg))
 
 
+class MiniView(discord.ui.View):
+    def __init__(self, cog, uid: int, spec: dict, expected: str, inter: discord.Interaction):
+        super().__init__(timeout=60)
+        self.cog, self.uid, self.spec, self.expected, self.inter = cog, uid, spec, expected, inter
+        self.picked: list[int] = []
+        self.done = False
+        for i, label in enumerate(spec["options"]):
+            b = discord.ui.Button(label=label, style=discord.ButtonStyle.secondary, row=i // 4 if len(spec["options"]) > 5 else 0)
+            b.callback = self._make_cb(i, b)
+            self.add_item(b)
+
+    def _make_cb(self, i: int, b: discord.ui.Button):
+        async def cb(interaction: discord.Interaction):
+            if interaction.user.id != self.uid or self.done:
+                return await interaction.response.defer()
+            self.picked.append(i)
+            b.disabled, b.style = True, discord.ButtonStyle.primary
+            if len(self.picked) < self.spec["need"]:
+                emb = make_embed(title=f"🎮 {self.spec['title']}", description=f"{self.spec['prompt']}\n\nLlevás **{len(self.picked)}/{self.spec['need']}**")
+                return await interaction.response.edit_message(embed=emb, view=self)
+            self.done = True
+            self.stop()
+            gid = interaction.guild_id
+            if ",".join(map(str, self.picked)) != self.expected:
+                await W.fail_task(self.cog.bot.db, gid, self.uid)
+                return await interaction.response.edit_message(embed=error("¡Fallaste! Perdiste tu racha 💔"), view=None)
+            r = await W.finish_task(self.cog.bot.db, gid, self.uid, self.spec["mult"])
+            msg = f"¡Genial! Ganaste **{fmt(r['reward'])}** {COIN}  •  Racha: **{r['streak']}** 🔥" + (f" (+{r['bonus']}%)" if r["bonus"] else "")
+            if r["leveled"]:
+                msg += f"\n🎉 ¡Subiste a **{r['title']}** (nivel {r['level']})!"
+            await interaction.response.edit_message(embed=ok(msg), view=None)
+        return cb
+
+    async def on_timeout(self):
+        if not self.done:
+            await W.fail_task(self.cog.bot.db, self.inter.guild_id, self.uid)
+            try:
+                await self.inter.edit_original_response(embed=error("⏰ Se acabó el tiempo."), view=None)
+            except discord.HTTPException:
+                pass
+
+
 class TaskView(discord.ui.View):
     def __init__(self, cog, uid: int, answer: str):
         super().__init__(timeout=60)
@@ -177,7 +219,7 @@ class Economy(commands.Cog):
             msg += f"\n🎉 ¡Subiste a **{data['title']}**! Ahora ganás **+{int(W.LEVEL_BONUS * 100 * (data['level'] - 1))}%** por trabajo."
         await interaction.response.send_message(embed=ok(msg))
 
-    @app_commands.command(name="tarea", description="Resolvé un puzzle rápido para ganar un extra de monedas")
+    @app_commands.command(name="tarea", description="Resolvé un puzzle o minijuego rápido para ganar un extra de monedas")
     @app_commands.guild_only()
     async def tarea(self, interaction: discord.Interaction):
         gid, uid = interaction.guild_id, interaction.user.id
@@ -187,17 +229,23 @@ class Economy(commands.Cog):
             return await interaction.response.send_message(
                 embed=error(f"Todavía no hay tareas nuevas. Volvé <t:{int(ready)}:R>."), ephemeral=True
             )
-        question, answer = W.make_puzzle()
-        view = TaskView(self, uid, answer)
-        await interaction.response.send_message(
-            embed=make_embed(title="📋 Tarea", description=f"{question}\n\nTenés **60 segundos**."), view=view, ephemeral=True
-        )
-
-    async def _avatar(self, member) -> bytes | None:
-        try:
-            return await member.display_avatar.replace(size=128, format="png").read()
-        except Exception:
-            return None
+        spec, answer = W.new_task()
+        if spec["type"] == "text":
+            view = TaskView(self, uid, answer)
+            return await interaction.response.send_message(
+                embed=make_embed(title="📋 Tarea", description=f"{spec['prompt']}\n\nTenés **60 segundos**."), view=view, ephemeral=True
+            )
+        if spec["preview"]:
+            emb = make_embed(title=f"🎮 {spec['title']}", description=f"{spec['prompt']}\n\n# {spec['preview']}\n\n¡Tenés **{spec['preview_s']} segundos**!")
+            await interaction.response.send_message(embed=emb, ephemeral=True)
+            await asyncio.sleep(spec["preview_s"])
+            desc = "¡Ahora tocá en orden!" if spec["type"] == "seq" else "¿Cuál es la respuesta?"
+        else:
+            await interaction.response.defer(ephemeral=True)
+            desc = ""
+        view = MiniView(self, uid, spec, answer, interaction)
+        emb = make_embed(title=f"🎮 {spec['title']}", description=f"{spec['prompt'] if not spec['preview'] else desc}\n\nTenés **60 segundos**.")
+        await interaction.edit_original_response(embed=emb, view=view)
 
     @app_commands.command(name="nivel-trabajo", description="Tu tarjeta de nivel de trabajo")
     @app_commands.guild_only()

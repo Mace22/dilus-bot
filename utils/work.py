@@ -98,12 +98,12 @@ async def start_task(db, gid: int, uid: int):
     return ("ok", None) if cur.rowcount else ("cooldown", now + TASK_COOLDOWN)
 
 
-async def finish_task(db, gid: int, uid: int) -> dict:
+async def finish_task(db, gid: int, uid: int, mult_extra: float = 1.0) -> dict:
     st = await get_stats(db, gid, uid)
     old = level_of(st["xp"])
     streak = st["streak"] + 1
     bonus = min(streak - 1, STREAK_CAP) * STREAK_BONUS
-    reward = int(random.randint(*TASK_BASE) * mult(old) * (1 + bonus))
+    reward = int(random.randint(*TASK_BASE) * mult(old) * (1 + bonus) * mult_extra)
     await _pay(db, gid, uid, reward, XP_TASK, "task")
     await db.execute(
         "UPDATE work_stats SET streak = ?, best_streak = MAX(best_streak, ?) WHERE guild_id = ? AND user_id = ?",
@@ -223,6 +223,58 @@ def make_puzzle() -> tuple[str, str]:
         if "".join(letters) != w:
             break
     return f"🔤 Ordená las letras para formar una palabra: **{' '.join(letters).upper()}**", w
+
+
+MINI_MULT = 1.5   # los minijuegos pagan 50% más que un puzzle de texto
+EMOJIS = ["🍎", "🍌", "🍇", "🍓", "🍉", "🍊", "🥝", "🍒", "⭐", "🔥", "💎", "🍀", "🎲", "🚀", "🐱", "🐶"]
+ODD_PAIRS = [("🙂", "🙃"), ("😀", "😃"), ("🕐", "🕑"), ("🔵", "🟣"), ("🌕", "🌖"), ("🐵", "🙈"), ("🍊", "🍑"), ("⬆️", "↗️"), ("🔴", "🟠"), ("😐", "😑")]
+
+
+def make_minigame() -> tuple[dict, str]:
+    """Minijuego con botones. spec: type pick (1 click) o seq (varios clicks en orden)."""
+    kind = random.choice(["memoria", "orden", "intruso", "conteo"])
+    if kind == "memoria":
+        opts = random.sample(EMOJIS, 6)
+        order = random.sample(range(6), 4)
+        return ({"type": "seq", "title": "Memoria", "prompt": "🧠 Memorizá el orden de los emojis. Después tocalos en el mismo orden.",
+                 "options": opts, "preview": " ".join(opts[i] for i in order), "preview_s": 4, "need": 4, "mult": MINI_MULT},
+                ",".join(map(str, order)))
+    if kind == "orden":
+        nums = random.sample(range(1, 100), 5)
+        asc = random.random() < 0.5
+        idx = sorted(range(5), key=lambda i: nums[i], reverse=not asc)
+        return ({"type": "seq", "title": "Ordená", "prompt": f"🔢 Tocá los números de **{'menor a mayor' if asc else 'mayor a menor'}**.",
+                 "options": [str(n) for n in nums], "preview": None, "preview_s": 0, "need": 5, "mult": MINI_MULT},
+                ",".join(map(str, idx)))
+    if kind == "intruso":
+        a, b = random.choice(ODD_PAIRS)
+        if random.random() < 0.5:
+            a, b = b, a
+        opts, k = [a] * 16, random.randrange(16)
+        opts[k] = b
+        return ({"type": "pick", "title": "Intruso", "prompt": "🔎 Hay **uno distinto**. ¡Encontralo!",
+                 "options": opts, "preview": None, "preview_s": 0, "need": 1, "mult": MINI_MULT}, str(k))
+    target, fillers = random.choice(EMOJIS), None
+    fillers = [e for e in EMOJIS if e != target]
+    n = random.randint(3, 8)
+    items = [target] * n + random.choices(fillers, k=random.randint(8, 12))
+    random.shuffle(items)
+    ans = n
+    opts = sorted({ans, *[max(1, ans + d) for d in random.sample([-2, -1, 1, 2, 3], 3)]})[:4]
+    if ans not in opts:
+        opts[0] = ans
+    random.shuffle(opts)
+    return ({"type": "pick", "title": "Conteo", "prompt": f"👀 Mirá bien y contá cuántos {target} hay.",
+             "options": [str(o) for o in opts], "preview": " ".join(items), "preview_s": 5, "need": 1, "mult": MINI_MULT},
+            str(opts.index(ans)))
+
+
+def new_task(mini_chance: float = 0.45) -> tuple[dict, str]:
+    """(spec, respuesta esperada). 'text' = puzzle clásico; el resto son minijuegos."""
+    if random.random() < mini_chance:
+        return make_minigame()
+    q, a = make_puzzle()
+    return {"type": "text", "title": "Tarea", "prompt": q, "mult": 1.0}, a
 
 
 def check(answer: str, expected: str) -> bool:

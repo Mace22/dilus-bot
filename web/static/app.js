@@ -401,37 +401,62 @@ VIEWS.inicio = async (root, token) => {
   const paintStreak2 = () => { streakTxt.textContent = `🧩 ${wi.tasks} tareas hechas · 🔥 racha ${wi.streak} (mejor ${wi.best_streak}) · bonus por racha hasta +50%`; };
   paintStreak2();
   const task = claimCard({
-    icon: "work", title: "Tarea (puzzle)", desc: `Resolvé un puzzle y ganá un extra. Disponible cada ${fmtDur(wi.task_cooldown)}.`, total: wi.task_cooldown,
+    icon: "work", title: "Tarea (puzzle / minijuego)", desc: `Resolvé un puzzle o minijuego y ganá un extra. Disponible cada ${fmtDur(wi.task_cooldown)}.`, total: wi.task_cooldown,
     extra: h("div", {}, streakTxt, qBox),
     readyAt: () => wi.task_ready_at, setReady: t => { wi.task_ready_at = t; },
     label: () => "Pedir tarea",
     claim: async () => {
       const r = await gpost("/api/task/start");
       wi.task_ready_at = Date.now() / 1000 + wi.task_cooldown;
-      const inp = h("input", { type: "text", maxlength: "40", placeholder: "Tu respuesta…", autocomplete: "off", style: { flex: "1", minWidth: "0", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line, #333)", background: "transparent", color: "inherit" } });
-      const send = h("button", { class: "btn btn-primary", text: "Enviar" });
-      const done = () => { inp.disabled = true; send.disabled = true; };
-      const submit = async () => {
-        if (send.disabled) return;
-        send.disabled = true;
+      const spec = r.spec;
+      const btnStyle = { fontSize: "1.2rem", minWidth: "52px", padding: "10px 12px" };
+      let finished = false;
+      const finish = async answer => {
+        if (finished) return; finished = true;
+        qBox.querySelectorAll("button,input").forEach(x => { x.disabled = true; });
         try {
-          const a = await gpost("/api/task/answer", { answer: inp.value });
-          Object.assign(wi, a.info); wi.task_ready_at = a.info.task_ready_at; paintWork(); paintStreak2(); done();
+          const a = await gpost("/api/task/answer", { answer });
+          Object.assign(wi, a.info); wi.task_ready_at = a.info.task_ready_at; paintWork(); paintStreak2();
           if (a.correct) {
             setBalance(a.balance); Sfx.coins(6);
             qBox.replaceChildren(h("b", { text: `✅ ¡Correcto! +${fmt(a.reward)} monedas · racha ${a.streak}${a.bonus ? ` (+${a.bonus}%)` : ""}${a.leveled ? ` · 🎉 ¡${a.title}!` : ""}` }));
             toast(`¡Correcto! Ganaste ${fmt(a.reward)} monedas.`, "gold");
           } else {
-            qBox.replaceChildren(h("b", { text: `❌ Incorrecto. Era: ${a.answer}. Perdiste la racha.` }));
+            qBox.replaceChildren(h("b", { text: spec.type === "text" ? `❌ Incorrecto. Era: ${a.answer}. Perdiste la racha.` : "❌ Fallaste. Perdiste la racha." }));
             toast("Respuesta incorrecta", "err");
           }
-        } catch (e) { done(); qBox.replaceChildren(h("b", { text: e.message })); toast(e.message, "err"); }
+        } catch (e) { qBox.replaceChildren(h("b", { text: e.message })); toast(e.message, "err"); }
       };
-      send.addEventListener("click", submit);
-      inp.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
-      qBox.replaceChildren(h("p", { style: { margin: "0 0 8px", fontWeight: "600" }, text: r.question }), h("div", { style: { display: "flex", gap: "8px" } }, inp, send));
-      inp.focus();
-      setTimeout(() => { if (!send.disabled) { done(); qBox.replaceChildren(h("b", { text: "⏰ Se acabó el tiempo." })); } }, (r.seconds + 5) * 1000);
+      const head = h("p", { style: { margin: "0 0 8px", fontWeight: "600" }, text: (spec.type === "text" ? "" : "🎮 ") + spec.prompt });
+      const showControls = () => {
+        if (spec.type === "text") {
+          const inp = h("input", { type: "text", maxlength: "40", placeholder: "Tu respuesta…", autocomplete: "off", style: { flex: "1", minWidth: "0", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line, #333)", background: "transparent", color: "inherit" } });
+          const send = h("button", { class: "btn btn-primary", text: "Enviar", onclick: () => finish(inp.value) });
+          inp.addEventListener("keydown", e => { if (e.key === "Enter") finish(inp.value); });
+          qBox.replaceChildren(head, h("div", { style: { display: "flex", gap: "8px" } }, inp, send)); inp.focus();
+          return;
+        }
+        const picked = [], prog = h("small", { class: "note", text: spec.type === "seq" ? `0/${spec.need}` : "" });
+        const grid = h("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px", margin: "6px 0" } },
+          ...spec.options.map((o, i) => {
+            const b = h("button", { class: "btn btn-ghost", style: btnStyle, text: o });
+            b.addEventListener("click", () => {
+              picked.push(i); b.disabled = true; b.classList.add("btn-primary"); prog.textContent = spec.type === "seq" ? `${picked.length}/${spec.need}` : "";
+              if (picked.length >= spec.need) finish(picked.join(","));
+            });
+            return b;
+          }));
+        qBox.replaceChildren(head, grid, prog);
+      };
+      if (spec.preview) {
+        const pv = h("div", { style: { fontSize: "1.8rem", letterSpacing: "4px", margin: "8px 0", lineHeight: "1.4" }, text: spec.preview });
+        const cd = h("small", { class: "note" });
+        qBox.replaceChildren(head, pv, cd);
+        let left = spec.preview_s; cd.textContent = `Se oculta en ${left}s…`;
+        const iv = setInterval(() => { left--; if (left <= 0) { clearInterval(iv); showControls(); } else cd.textContent = `Se oculta en ${left}s…`; }, 1000);
+        S.cleanups.push(() => clearInterval(iv));
+      } else showControls();
+      setTimeout(() => { if (!finished) { finished = true; qBox.replaceChildren(h("b", { text: "⏰ Se acabó el tiempo." })); } }, (r.seconds + (spec.preview_s || 0) + 5) * 1000);
     },
   });
 
