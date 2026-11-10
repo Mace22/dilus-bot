@@ -60,13 +60,17 @@ CREATE TABLE IF NOT EXISTS economy (
     PRIMARY KEY (guild_id, user_id)
 );
 
--- Tareas (/trabajar, /tarea1, /tarea2): última vez que cada persona hizo cada una
-CREATE TABLE IF NOT EXISTS task_cd (
+CREATE TABLE IF NOT EXISTS work_stats (
     guild_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    task TEXT NOT NULL,
-    last REAL NOT NULL DEFAULT 0,
-    PRIMARY KEY (guild_id, user_id, task)
+    xp INTEGER NOT NULL DEFAULT 0,
+    works INTEGER NOT NULL DEFAULT 0,
+    tasks INTEGER NOT NULL DEFAULT 0,
+    earned INTEGER NOT NULL DEFAULT 0,
+    last_task REAL NOT NULL DEFAULT 0,
+    streak INTEGER NOT NULL DEFAULT 0,
+    best_streak INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS shop (
@@ -227,6 +231,12 @@ class Database:
         for column, col_type in MIGRATIONS.items():
             if column not in existing:
                 await self.conn.execute(f"ALTER TABLE guild_settings ADD COLUMN {column} {col_type}")
+
+        async with self.conn.execute("PRAGMA table_info(work_stats)") as cur:
+            have = {row["name"] for row in await cur.fetchall()}
+        for column in ("streak", "best_streak"):
+            if column not in have:
+                await self.conn.execute(f"ALTER TABLE work_stats ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
 
     async def close(self):
         if self.conn:

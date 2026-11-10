@@ -8,7 +8,8 @@ from collections import defaultdict, deque
 import discord
 
 from cogs import blackjack as bj
-from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, SLOT_MULT, SLOT_PAIR_MULT, SLOT_SYMBOLS, TASK_COOLDOWN, TASKS, TaskCooldown
+from cogs.economy import DAILY_BASE, DAILY_STREAK_BONUS, DAILY_STREAK_CAP, JOBS, SLOT_MULT, SLOT_PAIR_MULT, SLOT_SYMBOLS
+from utils import work as W
 from cogs.economy import MAX_BET as SL_MAX_BET
 from cogs.economy import MIN_BET as SL_MIN_BET
 from cogs.levels import level_from_xp
@@ -18,6 +19,7 @@ from cogs.roulette import MAX_BET as RL_MAX_BET
 from cogs.roulette import MIN_BET as RL_MIN_BET
 from utils import roulette as rl
 from web.admin import Admin
+from web.bjmulti import BJMulti
 from web.common import ApiError
 
 log = logging.getLogger("dilus-bot.web")
@@ -34,9 +36,11 @@ class Services:
         self.games: dict[tuple[int, int], dict] = {}      # manos de blackjack en juego
         self.expired: dict[tuple[int, int], tuple[float, dict]] = {}   # manos cerradas por inactividad
         self._own_history: dict[int, deque] = {}
+        self._tasks: dict[tuple[int, int], tuple] = {}
         self._locks: dict[tuple[int, int], asyncio.Lock] = defaultdict(asyncio.Lock)
         self._who: dict[int, tuple[float, tuple[str, str | None]]] = {}
         self.admin = Admin(self)
+        self.bjm = BJMulti(self)                           # mesas de blackjack multijugador
 
     # ------------------------------------------------------------------
     # Utilidades
@@ -121,7 +125,6 @@ class Services:
         if lv:
             xp_rank = (await self.db.fetchone("SELECT COUNT(*) + 1 AS p FROM levels WHERE guild_id = ? AND xp > ?", (gid, xp)))["p"]
 
-        task_times = await self.eco.task_times(gid, uid)
         last_daily = row["last_daily"]
         alive = 0 < last_daily and now - last_daily < 172800
         streak = row["streak"] if alive else 0
@@ -145,11 +148,8 @@ class Services:
                 "next_reward": DAILY_BASE + min(next_streak - 1, DAILY_STREAK_CAP) * DAILY_STREAK_BONUS,
                 "base": DAILY_BASE, "bonus": DAILY_STREAK_BONUS, "cap": DAILY_STREAK_CAP,
             },
-            "tasks": [
-                {"key": t.key, "title": t.title, "min": t.rng[0], "max": t.rng[1], "cooldown": TASK_COOLDOWN,
-                 "ready_at": task_times[t.key] + TASK_COOLDOWN if task_times.get(t.key) else 0}
-                for t in TASKS.values()
-            ],
+            "work_info": await W.summary(self.db, gid, uid),
+            "work": {"ready_at": row["last_work"] + W.WORK_COOLDOWN if row["last_work"] else 0, "min": W.WORK_BASE[0], "max": W.WORK_BASE[1], "cooldown": W.WORK_COOLDOWN},
             "casino": casino,
             "limits": {"bj_min": bj.MIN_BET, "bj_max": bj.MAX_BET, "rl_min": RL_MIN_BET, "rl_max": RL_MAX_BET, "sl_min": SL_MIN_BET, "sl_max": SL_MAX_BET, "cf_min": SL_MIN_BET, "cf_max": SL_MAX_BET, "pay_max": PAY_MAX},
             "slots": {"symbols": SLOT_SYMBOLS, "mult": SLOT_MULT, "pair": SLOT_PAIR_MULT},
@@ -174,15 +174,35 @@ class Services:
                 raise ApiError("Ya reclamaste tu diaria.", 409)
             return {"reward": reward, "streak": streak, "ready_at": now + 86400, "balance": await self.eco.balance(gid, uid)}
 
-    async def claim_task(self, gid: int, uid: int, key) -> dict:
-        if not isinstance(key, str) or key not in TASKS:
-            raise ApiError("Esa tarea no existe.", 404)
+    async def claim_work(self, gid: int, uid: int) -> dict:
         async with self._locks[(gid, uid)]:
-            try:
-                reward, job, ready_at = await self.eco.do_task(gid, uid, key)
-            except TaskCooldown as e:
-                raise ApiError("Estás cansado, volvé en un momento.", 409, ready_at=e.ready_at)
-            return {"reward": reward, "job": job, "ready_at": ready_at, "balance": await self.eco.balance(gid, uid)}
+            status, data = await W.do_work(self.db, gid, uid)
+            if status == "cooldown":
+                raise ApiError("Estás cansado, volvé más tarde.", 409, ready_at=data)
+            if status == "busy":
+                raise ApiError("Ya estás trabajando.", 409)
+            return {**data, "job": random.choice(JOBS), "balance": await self.eco.balance(gid, uid), "info": await W.summary(self.db, gid, uid)}
+
+    async def task_start(self, gid: int, uid: int) -> dict:
+        async with self._locks[(gid, uid)]:
+            status, ready = await W.start_task(self.db, gid, uid)
+            if status == "cooldown":
+                raise ApiError("Todavía no hay tareas nuevas.", 409, ready_at=ready)
+            spec, a = W.new_task()
+            spec = {**spec, "prompt": spec["prompt"].replace("**", "")}
+            self._tasks[(gid, uid)] = (a, time.time() + 75 + spec.get("preview_s", 0), spec["mult"])
+            return {"spec": spec, "seconds": 60}
+
+    async def task_answer(self, gid: int, uid: int, answer) -> dict:
+        async with self._locks[(gid, uid)]:
+            pend = self._tasks.pop((gid, uid), None)
+            if not pend or time.time() > pend[1]:
+                raise ApiError("No tenés una tarea activa (o se agotó el tiempo).", 409)
+            if not W.check(str(answer or "")[:60], pend[0]):
+                await W.fail_task(self.db, gid, uid)
+                return {"correct": False, "answer": pend[0], "info": await W.summary(self.db, gid, uid)}
+            r = await W.finish_task(self.db, gid, uid, pend[2])
+            return {"correct": True, **r, "balance": await self.eco.balance(gid, uid), "info": await W.summary(self.db, gid, uid)}
 
     # ------------------------------------------------------------------
     # Tienda de roles
@@ -279,6 +299,11 @@ class Services:
             mine = await self.db.fetchone("SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?", (gid, uid))
             my_value = mine["xp"] if mine else 0
             my_pos = (await self.db.fetchone("SELECT COUNT(*) + 1 AS p FROM levels WHERE guild_id = ? AND xp > ?", (gid, my_value)))["p"] if mine else None
+        elif kind == "work":
+            rows = await self.db.fetchall("SELECT * FROM work_stats WHERE guild_id = ? AND xp > 0 ORDER BY xp DESC, earned DESC LIMIT 10", (gid,))
+            mine = await W.get_stats(self.db, gid, uid)
+            my_value = mine["xp"]
+            my_pos = (await self.db.fetchone("SELECT COUNT(*) + 1 AS p FROM work_stats WHERE guild_id = ? AND xp > ?", (gid, my_value)))["p"] if my_value else None
         else:
             kind = "eco"
             rows = await self.db.fetchall("SELECT user_id, balance FROM economy WHERE guild_id = ? AND balance > 0 ORDER BY balance DESC LIMIT 10", (gid,))
@@ -288,7 +313,11 @@ class Services:
         entries = []
         for r in rows:
             name, avatar = await self.who(guild, r["user_id"])
-            if kind == "xp":
+            if kind == "work":
+                lv = W.level_of(r["xp"])
+                entries.append({"id": str(r["user_id"]), "name": name, "avatar": avatar, "value": r["xp"], "level": lv, "title": W.title_of(lv),
+                                "sub": f"{r['works']} trabajos · {r['tasks']} tareas · {r['earned']:,} 🪙 ganados".replace(",", ".")})
+            elif kind == "xp":
                 level = level_from_xp(r["xp"])[0]
                 entries.append({"id": str(r["user_id"]), "name": name, "avatar": avatar, "value": r["xp"], "level": level, "sub": f"{r['messages']} mensajes"})
             else:
@@ -309,6 +338,7 @@ class Services:
         if rows:
             await self.db.execute("DELETE FROM web_blackjack")
             log.info("Web: devolví las apuestas de %d mano(s) de blackjack que quedaron abiertas.", len(rows))
+        await self.bjm.recover()
 
     def _bj_dict(self, g: bj.Game, balance: int) -> dict:
         active = g.outcome is None
@@ -422,6 +452,7 @@ class Services:
         for key, (stamp, _) in list(self.expired.items()):    # avisos viejos que nadie vio
             if now - stamp > 3600:
                 self.expired.pop(key, None)
+        await self.bjm.sweep()                                # turnos vencidos y mesas abandonadas
 
     # ------------------------------------------------------------------
     # Ruleta (mismas reglas y pagos que /ruleta)
