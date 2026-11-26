@@ -19,6 +19,7 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 | 📜 **Logs** | Mensajes borrados/editados, entradas/salidas, bans, timeouts y cambios de roles en un canal (`/config logs`). Además todo se guarda 30 días y se ve en el panel web → Admin → Logs → **Eventos del servidor** (con filtros por tipo, búsqueda y avatares/apodos/voz/canales) |
 | 🎁 **Comunidad** | `/sorteo crear\|terminar`, `/ticket panel`, `/encuesta` |
 | 👋 **Bienvenida** | `/config bienvenida\|despedida\|levelup\|autorole\|ver` |
+| 👥 **Ingresos y rol Crew** | `/config ingresos [canal]`, `/config crew [rol]`, `/config crew_staff [rol]`: cuando alguien entra, el bot lo avisa en el canal de ingresos y el staff (Administrador, Gestionar roles o el rol de staff elegido) le da el rol Crew reaccionando con ✅. También se configura en el panel web → Admin → **Ajustes** |
 | 🎰 **Canal de features** | `/config features [canal]`: Blackjack, ruleta, slots, apostar y duelos de cara o cruz solo se pueden usar en ese canal (sin canal = en todos). También se elige desde el panel web → Admin → **Ajustes** |
 | 🔧 **Utilidades** | `/ayuda`, `/ping`, `/avatar`, `/serverinfo` |
 

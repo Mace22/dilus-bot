@@ -145,32 +145,62 @@ function adminModeration(ov, refreshStats) {
     h("div", { class: "row" }, go));
 }
 
-/* --- pestaña: ajustes (canal de features) --- */
+/* --- pestaña: ajustes (canal de features, ingresos y rol Crew) --- */
+function settingSelect(label, options, current, emptyText, onChange) {
+  const select = h("select", { class: "txt", "aria-label": label },
+    [h("option", { value: "", text: emptyText }), ...options.map(o => h("option", { value: o.id, text: o.text }))]);
+  select.value = current || "";
+  select.addEventListener("change", onChange);
+  return { select, field: h("div", { class: "field" }, h("label", { text: label }), select) };
+}
+
+function featuresCard(data) {
+  let saved = data.features_channel || "";
+  const save = h("button", { class: "btn btn-primary", disabled: true }, "Guardar canal");
+  const s = settingSelect("Canal", data.channels.map(c => ({ id: c.id, text: `#${c.name}${c.category ? ` · ${c.category}` : ""}` })),
+    saved, "Sin restricción (en todos los canales)", () => { save.disabled = s.select.value === saved; });
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    try {
+      const r = await gpost("/api/admin/features-channel", { channel: s.select.value || null });
+      saved = r.features_channel || "";
+      toast(r.name ? `Canal de features: #${r.name}` : "Quitaste la restricción de canal", "ok");
+    } catch (e) { toast(e.message, "err"); save.disabled = s.select.value === saved; }
+  });
+  return h("div", { class: "card admin-form" },
+    h("h3", { text: "Canal de features" }),
+    h("p", { class: "note", text: "Blackjack, ruleta, slots, apostar y duelos de cara o cruz solo se pueden usar en este canal de Discord. En otro canal, el bot avisa dónde jugar. Los juegos del panel web no se ven afectados. También se puede cambiar con /config features." }),
+    s.field, h("div", { class: "row" }, save));
+}
+
+function crewCard(data) {
+  const cur = data.crew;
+  const saved = { channel: cur.channel || "", role: cur.role || "", staff_role: cur.staff_role || "" };
+  const save = h("button", { class: "btn btn-primary", disabled: true }, "Guardar");
+  const dirty = () => { save.disabled = ch.select.value === saved.channel && rl.select.value === saved.role && st.select.value === saved.staff_role; };
+  const ch = settingSelect("Canal de ingresos", data.crew_channels.map(c => ({ id: c.id, text: `#${c.name}${c.category ? ` · ${c.category}` : ""}` })), saved.channel, "Desactivado", dirty);
+  const rl = settingSelect("Rol Crew (el que se da con ✅)", data.assignable_roles.map(r => ({ id: r.id, text: r.name })), saved.role, "Ninguno", dirty);
+  const st = settingSelect("Rol de staff (opcional)", data.all_roles.map(r => ({ id: r.id, text: r.name })), saved.staff_role, "Solo quienes tengan Gestionar roles", dirty);
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    try {
+      const r = await gpost("/api/admin/crew-settings", { channel: ch.select.value || null, role: rl.select.value || null, staff_role: st.select.value || null });
+      saved.channel = r.channel || ""; saved.role = r.role || ""; saved.staff_role = r.staff_role || "";
+      toast("Ajustes de ingresos guardados", "ok");
+    } catch (e) { toast(e.message, "err"); dirty(); }
+  });
+  return h("div", { class: "card admin-form" },
+    h("h3", { text: "Ingresos y rol Crew" }),
+    h("p", { class: "note", text: "Cuando alguien entra al servidor, el bot lo avisa en el canal de ingresos (conviene que lo vea solo el staff). Cualquier staff puede reaccionar con ✅ para darle el rol Crew. Staff = Administrador, Gestionar roles o el rol de staff que elijas. El rol Crew no puede tener permiso de Administrador. También se configura con /config ingresos, /config crew y /config crew_staff." }),
+    ch.field, rl.field, st.field, h("div", { class: "row" }, save));
+}
+
 function adminSettings() {
-  const box = h("div", { class: "card admin-form" }, h("div", { class: "skeleton", style: { height: "120px" } }));
+  const box = h("div", { class: "grid" }, h("div", { class: "card admin-form" }, h("div", { class: "skeleton", style: { height: "120px" } })));
   (async () => {
     const data = await gget("/api/admin/settings");
-    const select = h("select", { class: "txt", "aria-label": "Canal de features" },
-      [h("option", { value: "", text: "Sin restricción (en todos los canales)" }),
-        ...data.channels.map(c => h("option", { value: c.id, text: `#${c.name}${c.category ? ` · ${c.category}` : ""}` }))]);
-    select.value = data.features_channel || "";
-    let saved = select.value;
-    const save = h("button", { class: "btn btn-primary", disabled: true }, "Guardar canal");
-    select.addEventListener("change", () => { save.disabled = select.value === saved; });
-    save.addEventListener("click", async () => {
-      save.disabled = true;
-      try {
-        const r = await gpost("/api/admin/features-channel", { channel: select.value || null });
-        saved = r.features_channel || "";
-        toast(r.name ? `Canal de features: #${r.name}` : "Quitaste la restricción de canal", "ok");
-      } catch (e) { toast(e.message, "err"); save.disabled = select.value === saved; }
-    });
-    box.replaceChildren(
-      h("h3", { text: "Canal de features" }),
-      h("p", { class: "note", text: "Blackjack, ruleta, slots, apostar y duelos de cara o cruz solo se pueden usar en este canal de Discord. En otro canal, el bot avisa dónde jugar. Los juegos del panel web no se ven afectados. También se puede cambiar con /config features." }),
-      h("div", { class: "field" }, h("label", { text: "Canal" }), select),
-      h("div", { class: "row" }, save));
-  })().catch(e => box.replaceChildren(h("div", { class: "empty" }, h("p", { text: e.message }))));
+    box.replaceChildren(crewCard(data), featuresCard(data));
+  })().catch(e => box.replaceChildren(h("div", { class: "card empty" }, h("p", { text: e.message }))));
   return box;
 }
 

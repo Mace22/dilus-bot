@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS guild_settings (
     ticket_staff_role INTEGER,
     log_channel INTEGER,
     tempvoice_channel INTEGER,
-    features_channel INTEGER
+    features_channel INTEGER,
+    crew_channel INTEGER,
+    crew_role INTEGER,
+    crew_staff_role INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS giveaways (
@@ -158,6 +161,16 @@ CREATE TABLE IF NOT EXISTS event_log (
 CREATE INDEX IF NOT EXISTS idx_event_log_guild ON event_log (guild_id, id);
 CREATE INDEX IF NOT EXISTS idx_event_log_kind ON event_log (guild_id, kind, id);
 
+-- Avisos de "nuevo ingreso": el staff reacciona con ✅ para darle el rol Crew (sobrevive a reinicios)
+CREATE TABLE IF NOT EXISTS join_notices (
+    message_id INTEGER PRIMARY KEY,
+    guild_id INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    granted_by INTEGER,
+    ts REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS temp_voice (
     channel_id INTEGER PRIMARY KEY,
     guild_id INTEGER NOT NULL,
@@ -213,6 +226,9 @@ MIGRATIONS = {
     "log_channel": "INTEGER",
     "tempvoice_channel": "INTEGER",
     "features_channel": "INTEGER",
+    "crew_channel": "INTEGER",
+    "crew_role": "INTEGER",
+    "crew_staff_role": "INTEGER",
 }
 
 # Columnas permitidas en guild_settings (evita inyección SQL en set_setting)
@@ -227,6 +243,9 @@ SETTINGS = {
     "log_channel",
     "tempvoice_channel",
     "features_channel",
+    "crew_channel",
+    "crew_role",
+    "crew_staff_role",
 }
 
 

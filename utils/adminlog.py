@@ -21,6 +21,8 @@ ACTIONS = {
     "kick": ("Expulsó", "👢", "moderation"),
     "ban": ("Baneó", "🔨", "moderation"),
     "features_channel": ("Cambió el canal de features", "🎰", "settings"),
+    "crew_settings": ("Cambió los ajustes de ingresos/Crew", "👥", "settings"),
+    "crew_grant": ("Dio el rol Crew", "🏷️", "moderation"),
 }
 KEEP_PER_GUILD = 1000
 

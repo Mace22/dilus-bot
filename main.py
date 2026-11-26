@@ -35,6 +35,7 @@ EXTENSIONS = [
     "cogs.web",
     "cogs.warns",
     "cogs.eventlog",
+    "cogs.crew",
     "cogs.tempvoice",
     "cogs.utility",
 ]

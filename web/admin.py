@@ -11,6 +11,7 @@ import discord
 
 from cogs.warns import AUTO_TIMEOUT_MIN, WARN_LIMIT
 from utils import adminlog, eventlog
+from utils.crew import channel_problem, role_problem
 from web.common import ApiError
 
 log = logging.getLogger("dilus-bot.web.admin")
@@ -196,7 +197,60 @@ class Admin:
             if perms.view_channel and perms.send_messages:
                 channels.append({"id": str(c.id), "name": c.name, "category": c.category.name if c.category else None})
         current = str(fid) if fid and guild.get_channel(fid) else None
-        return {"features_channel": current, "channels": channels}
+
+        db = self.svc.db
+        crew_ch = await db.get_setting(gid, "crew_channel")
+        crew_role = await db.get_setting(gid, "crew_role")
+        crew_staff = await db.get_setting(gid, "crew_staff_role")
+        roles = [r for r in reversed(guild.roles) if not r.is_default()]
+        return {
+            "features_channel": current, "channels": channels,
+            "crew": {
+                "channel": str(crew_ch) if crew_ch and guild.get_channel(crew_ch) else None,
+                "role": str(crew_role) if crew_role and guild.get_role(crew_role) else None,
+                "staff_role": str(crew_staff) if crew_staff and guild.get_role(crew_staff) else None,
+            },
+            "crew_channels": [c for c in channels if channel_problem(guild.get_channel(int(c["id"])), me) is None],
+            "assignable_roles": [{"id": str(r.id), "name": r.name} for r in roles if role_problem(guild, r) is None],
+            "all_roles": [{"id": str(r.id), "name": r.name} for r in roles],
+        }
+
+    async def set_crew_settings(self, gid: int, uid: int, channel, role, staff_role) -> dict:
+        """Canal de ingresos, rol Crew y rol de staff (cada uno vacío = desactivado)."""
+        guild, actor = await self._actor(gid, uid)
+
+        def pick(raw, label):
+            if raw in (None, ""):
+                return None
+            if not isinstance(raw, str) or not raw.isdigit():
+                raise ApiError(f"{label}: elegí una opción válida.")
+            return int(raw)
+
+        ch = rl = st = None
+        if (cid := pick(channel, "Canal")) is not None:
+            ch = guild.get_channel(cid)
+            if not isinstance(ch, discord.TextChannel):
+                raise ApiError("Ese canal no existe o no es de texto.", 404)
+            if problem := channel_problem(ch, guild.me):
+                raise ApiError(problem, 409)
+        if (rid := pick(role, "Rol Crew")) is not None:
+            rl = guild.get_role(rid)
+            if rl is None:
+                raise ApiError("Ese rol no existe.", 404)
+            if problem := role_problem(guild, rl):
+                raise ApiError(problem, 409)
+        if (sid := pick(staff_role, "Rol de staff")) is not None:
+            st = guild.get_role(sid)
+            if st is None or st.is_default():
+                raise ApiError("Ese rol de staff no es válido.", 404)
+
+        db = self.svc.db
+        await db.set_setting(gid, "crew_channel", ch.id if ch else None)
+        await db.set_setting(gid, "crew_role", rl.id if rl else None)
+        await db.set_setting(gid, "crew_staff_role", st.id if st else None)
+        detail = f"Canal: {'#' + ch.name if ch else '—'} · Crew: {rl.name if rl else '—'} · Staff: {st.name if st else 'Gestionar roles'}"
+        await adminlog.record(self.svc.bot, guild, actor=actor, action="crew_settings", detail=detail, source="web")
+        return {"channel": str(ch.id) if ch else None, "role": str(rl.id) if rl else None, "staff_role": str(st.id) if st else None}
 
     async def set_features_channel(self, gid: int, uid: int, channel) -> dict:
         guild, actor = await self._actor(gid, uid)

@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from utils import adminlog
 from utils.embeds import error, make_embed, ok
+from utils.crew import CHECK, channel_problem, role_problem
 from utils.features import GAMES_TEXT
 
 log = logging.getLogger("dilus-bot.config")
@@ -155,6 +156,46 @@ class Config(commands.Cog):
             detail=f"#{canal.name}" if canal else "Sin restricción", source="discord",
         )
 
+    @config.command(name="ingresos", description="Canal donde aparecen los que entran al server, para darles el rol Crew (sin canal = desactivar)")
+    @app_commands.describe(canal="Canal de ingresos (conviene que lo vea solo el staff)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def ingresos(self, interaction: discord.Interaction, canal: discord.TextChannel | None = None):
+        if canal is not None and (problem := channel_problem(canal, interaction.guild.me)):
+            return await interaction.response.send_message(embed=error(problem), ephemeral=True)
+        await self.bot.db.set_setting(interaction.guild_id, "crew_channel", canal.id if canal else None)
+        if canal:
+            role_id = await self.bot.db.get_setting(interaction.guild_id, "crew_role")
+            extra = (f"\nEl staff le da el rol con {CHECK}." if role_id
+                     else "\nTodavía falta elegir el rol con `/config crew`.")
+            await interaction.response.send_message(embed=ok(f"Canal de ingresos: {canal.mention}. Acá aparece quién entra al server.{extra}"))
+        else:
+            await interaction.response.send_message(embed=ok("Aviso de ingresos desactivado."))
+        await adminlog.record(self.bot, interaction.guild, actor=interaction.user, action="crew_settings",
+                              detail=f"Canal de ingresos: #{canal.name}" if canal else "Canal de ingresos: desactivado", source="discord")
+
+    @config.command(name="crew", description="Rol Crew que el staff da reaccionando ✅ a los nuevos (sin rol = desactivar)")
+    @app_commands.describe(rol="Rol que se le da a la persona (no puede ser de administrador)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def crew(self, interaction: discord.Interaction, rol: discord.Role | None = None):
+        if rol is not None and (problem := role_problem(interaction.guild, rol)):
+            return await interaction.response.send_message(embed=error(problem), ephemeral=True)
+        await self.bot.db.set_setting(interaction.guild_id, "crew_role", rol.id if rol else None)
+        msg = f"Rol Crew: {rol.mention}" if rol else "Rol Crew desactivado."
+        await interaction.response.send_message(embed=ok(msg), allowed_mentions=discord.AllowedMentions.none())
+        await adminlog.record(self.bot, interaction.guild, actor=interaction.user, action="crew_settings",
+                              detail=f"Rol Crew: {rol.name}" if rol else "Rol Crew: desactivado", source="discord")
+
+    @config.command(name="crew_staff", description="Rol de staff que puede dar el Crew, además de quienes gestionan roles (sin rol = solo ellos)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def crew_staff(self, interaction: discord.Interaction, rol: discord.Role | None = None):
+        if rol is not None and rol.is_default():
+            return await interaction.response.send_message(embed=error("No puede ser @everyone."), ephemeral=True)
+        await self.bot.db.set_setting(interaction.guild_id, "crew_staff_role", rol.id if rol else None)
+        msg = f"Staff que puede dar el Crew: {rol.mention} (y quienes tengan Gestionar roles)" if rol else "Solo pueden dar el Crew quienes tengan Gestionar roles o Administrador."
+        await interaction.response.send_message(embed=ok(msg), allowed_mentions=discord.AllowedMentions.none())
+        await adminlog.record(self.bot, interaction.guild, actor=interaction.user, action="crew_settings",
+                              detail=f"Rol de staff del Crew: {rol.name}" if rol else "Rol de staff del Crew: quitado", source="discord")
+
     @config.command(name="ver", description="Ver la configuración actual")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def view(self, interaction: discord.Interaction):
@@ -171,6 +212,9 @@ class Config(commands.Cog):
         logs = await db.get_setting(gid, "log_channel")
         tempvoice = await db.get_setting(gid, "tempvoice_channel")
         features = await db.get_setting(gid, "features_channel")
+        crew_ch = await db.get_setting(gid, "crew_channel")
+        crew_role = await db.get_setting(gid, "crew_role")
+        crew_staff = await db.get_setting(gid, "crew_staff_role")
         embed = make_embed("⚙️ Configuración")
         embed.add_field(name="Bienvenida", value=ch(welcome))
         embed.add_field(name="Despedida", value=ch(goodbye))
@@ -179,6 +223,9 @@ class Config(commands.Cog):
         embed.add_field(name="Logs", value=ch(logs))
         embed.add_field(name="Voz temporal (lobby)", value=ch(tempvoice))
         embed.add_field(name="Canal de features", value=ch(features) if features else "todos los canales")
+        embed.add_field(name="Canal de ingresos", value=ch(crew_ch))
+        embed.add_field(name="Rol Crew", value=f"<@&{crew_role}>" if crew_role else "—")
+        embed.add_field(name="Staff del Crew", value=f"<@&{crew_staff}>" if crew_staff else "Gestionar roles")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
