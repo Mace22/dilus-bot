@@ -174,6 +174,60 @@ function adminSettings() {
   return box;
 }
 
+/* --- eventos del servidor (entradas, salidas, mensajes, roles, perfil, voz...) --- */
+function eventRow(it) {
+  const x = it.extra || {};
+  const imgs = [x.old_img, x.img].filter(Boolean).map(src => h("img", { class: "avatar", src, alt: "", style: { width: "38px", height: "38px" } }));
+  const detail = it.kind === "message_delete" ? (it.detail || (x.attachments ? "(sin texto)" : "")) : (x.before == null ? it.detail : "");
+  return h("div", { class: `log-row ${it.category}` },
+    h("div", { class: "log-ic", text: it.emoji }),
+    h("div", { class: "log-main" },
+      h("div", {}, it.user ? h("b", { text: it.user }) : null, it.user ? " · " : null, it.title, it.channel ? ` en #${it.channel}` : null),
+      detail ? h("small", { text: detail }) : null,
+      x.before != null && it.kind === "message_edit" ? [h("small", { text: `Antes: ${x.before}` }), h("small", { text: `Después: ${x.after}` })] : null,
+      x.attachments ? h("small", { text: `📎 ${x.attachments} adjunto(s)` }) : null,
+      h("small", { text: fmtWhen(it.ts) })),
+    imgs.length ? h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, imgs.length > 1 ? [imgs[0], "→", imgs[1]] : imgs) : null);
+}
+
+function adminEvents() {
+  const st = { cat: "all", q: "", timer: 0, seq: 0 };
+  const chips = h("div", { class: "tabs" });
+  const search = h("input", { class: "txt", placeholder: "Buscar por persona, canal o texto…", maxlength: "40", autocomplete: "off", "aria-label": "Buscar en los eventos" });
+  const list = h("div", {});
+  const more = h("button", { class: "btn btn-ghost hide" }, "Cargar más");
+  const note = h("p", { class: "note" });
+  let cats = [], next = null;
+
+  const paintChips = () => chips.replaceChildren(...[{ id: "all", name: "Todo", emoji: "📋" }, ...cats].map(c =>
+    h("button", { class: c.id === st.cat ? "on" : "", text: `${c.emoji} ${c.name}`, onclick: () => { st.cat = c.id; paintChips(); load(true); } })));
+
+  async function load(reset) {
+    const mine = ++st.seq;
+    if (reset) { list.replaceChildren(h("div", { class: "skeleton", style: { height: "120px" } })); next = null; }
+    more.disabled = true;
+    try {
+      const r = await gget("/api/admin/events", { kind: st.cat, q: st.q, before: reset ? undefined : next });
+      if (mine !== st.seq) return;
+      if (!cats.length) { cats = r.categories; paintChips(); }
+      note.textContent = `Se guardan los últimos ${r.retention_days} días. Incluye el contenido de mensajes borrados y editados, así que solo lo ven los administradores.`;
+      const rows = r.items.map(eventRow);
+      if (reset) {
+        list.replaceChildren(rows.length ? h("div", { class: "card log-list", dataset: { events: "1" } }, rows)
+          : h("div", { class: "card empty" }, h("div", { class: "big", text: "🧾" }), h("p", { text: st.q || st.cat !== "all" ? "No hay eventos con ese filtro." : "Todavía no hay eventos registrados." })));
+      } else {
+        list.querySelector("[data-events]")?.append(...rows);
+      }
+      next = r.next; more.classList.toggle("hide", !next);
+    } catch (e) { if (mine === st.seq) list.replaceChildren(h("div", { class: "card empty" }, h("p", { text: e.message }))); }
+    more.disabled = false;
+  }
+  more.addEventListener("click", () => load(false));
+  search.addEventListener("input", () => { clearTimeout(st.timer); st.timer = setTimeout(() => { st.q = search.value.trim(); load(true); }, 300); });
+  paintChips(); load(true);
+  return h("div", {}, chips, h("div", { class: "field" }, search), note, list, h("div", { class: "row", style: { justifyContent: "center", marginTop: "12px" } }, more));
+}
+
 /* --- pestaña: logs --- */
 async function adminLogs(box, kind) {
   box.replaceChildren(h("div", { class: "skeleton", style: { height: "120px" } }));
@@ -202,7 +256,7 @@ VIEWS.admin = async (root, token) => {
   const refreshStats = async () => { try { paintStats(await gget("/api/admin/overview")); } catch { /* se actualiza en la próxima */ } if (tab === "logs") show("logs"); };
 
   const body = h("div", {});
-  let tab = "eco", kind = "all";
+  let tab = "eco", kind = "all", source = "events";
   const tabsEl = h("div", { class: "tabs" });
   function show(id) {
     tab = id;
@@ -211,11 +265,16 @@ VIEWS.admin = async (root, token) => {
     else if (id === "mod") body.replaceChildren(adminModeration(ov, refreshStats));
     else if (id === "settings") body.replaceChildren(adminSettings());
     else {
-      const list = h("div", {});
-      const chips = h("div", { class: "tabs" }, [["all", "Todo"], ["economy", "🪙 Economía"], ["moderation", "🛡️ Moderación"]].map(([k, label]) =>
-        h("button", { class: k === kind ? "on" : "", text: label, onclick: () => { kind = k; show("logs"); } })));
-      body.replaceChildren(chips, list);
-      adminLogs(list, kind).catch(e => list.replaceChildren(h("div", { class: "card empty" }, h("p", { text: e.message }))));
+      const sources = h("div", { class: "tabs" }, [["events", "📋 Eventos del servidor"], ["staff", "🛡️ Acciones de staff"]].map(([k, label]) =>
+        h("button", { class: k === source ? "on" : "", text: label, onclick: () => { source = k; show("logs"); } })));
+      if (source === "events") body.replaceChildren(sources, adminEvents());
+      else {
+        const list = h("div", {});
+        const chips = h("div", { class: "tabs" }, [["all", "Todo"], ["economy", "🪙 Economía"], ["moderation", "🛡️ Moderación"]].map(([k, label]) =>
+          h("button", { class: k === kind ? "on" : "", text: label, onclick: () => { kind = k; show("logs"); } })));
+        body.replaceChildren(sources, chips, list);
+        adminLogs(list, kind).catch(e => list.replaceChildren(h("div", { class: "card empty" }, h("p", { text: e.message }))));
+      }
     }
   }
   show("eco");

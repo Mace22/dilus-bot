@@ -16,7 +16,7 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 | 🎙️ **Voz 24/7** | `/entrar` (entra a tu canal **silenciado y ensordecido** y se queda siempre; si algo lo saca, vuelve solo), `/salir` |
 | 🔊 **Canales de voz temporales** | Entrás a un canal "lobby" y se crea uno propio que se borra solo al quedar vacío (`/config tempvoice`) |
 | 🛡️ **Moderación** | `/clear`, `/kick`, `/ban`, `/timeout`, `/untimeout`, `/warn`, `/warns`, `/unwarn`, `/clearwarns` (timeout automático a las 3 advertencias) |
-| 📜 **Logs** | Mensajes borrados/editados, entradas/salidas, bans, timeouts y cambios de roles en un canal (`/config logs`) |
+| 📜 **Logs** | Mensajes borrados/editados, entradas/salidas, bans, timeouts y cambios de roles en un canal (`/config logs`). Además todo se guarda 30 días y se ve en el panel web → Admin → Logs → **Eventos del servidor** (con filtros por tipo, búsqueda y avatares/apodos/voz/canales) |
 | 🎁 **Comunidad** | `/sorteo crear\|terminar`, `/ticket panel`, `/encuesta` |
 | 👋 **Bienvenida** | `/config bienvenida\|despedida\|levelup\|autorole\|ver` |
 | 🎰 **Canal de features** | `/config features [canal]`: Blackjack, ruleta, slots, apostar y duelos de cara o cruz solo se pueden usar en ese canal (sin canal = en todos). También se elige desde el panel web → Admin → **Ajustes** |

@@ -34,6 +34,7 @@ EXTENSIONS = [
     "cogs.roulette",
     "cogs.web",
     "cogs.warns",
+    "cogs.eventlog",
     "cogs.tempvoice",
     "cogs.utility",
 ]

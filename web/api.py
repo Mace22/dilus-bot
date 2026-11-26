@@ -61,6 +61,7 @@ class Api:
             ("POST", "/api/tags/equip"): lambda g, u, q, b: self.svc.tag_equip(g, u, b.get("tag")),
             ("GET", "/api/admin/overview"): lambda g, u, q, b: self.svc.admin.overview(g, u),
             ("GET", "/api/admin/members"): lambda g, u, q, b: self.svc.admin.members(g, u, q.get("q")),
+            ("GET", "/api/admin/events"): lambda g, u, q, b: self.svc.admin.events(g, u, q.get("kind"), q.get("q"), q.get("before")),
             ("GET", "/api/admin/settings"): lambda g, u, q, b: self.svc.admin.settings(g, u),
             ("POST", "/api/admin/features-channel"): lambda g, u, q, b: self.svc.admin.set_features_channel(g, u, b.get("channel")),
             ("GET", "/api/admin/logs"): lambda g, u, q, b: self.svc.admin.logs(g, u, q.get("kind")),

@@ -142,6 +142,22 @@ CREATE TABLE IF NOT EXISTS warns (
     created REAL NOT NULL
 );
 
+-- Registro de eventos del servidor para el panel web (entradas, salidas, mensajes, roles, perfil, voz...)
+CREATE TABLE IF NOT EXISTS event_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    user_id INTEGER,
+    user_name TEXT,
+    channel_id INTEGER,
+    channel_name TEXT,
+    detail TEXT NOT NULL DEFAULT '',
+    extra TEXT,
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_event_log_guild ON event_log (guild_id, id);
+CREATE INDEX IF NOT EXISTS idx_event_log_kind ON event_log (guild_id, kind, id);
+
 CREATE TABLE IF NOT EXISTS temp_voice (
     channel_id INTEGER PRIMARY KEY,
     guild_id INTEGER NOT NULL,

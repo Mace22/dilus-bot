@@ -3,13 +3,14 @@
 El permiso se revisa en CADA pedido contra Discord (no se confía en lo que diga el navegador).
 """
 import datetime
+import json
 import logging
 import time
 
 import discord
 
 from cogs.warns import AUTO_TIMEOUT_MIN, WARN_LIMIT
-from utils import adminlog
+from utils import adminlog, eventlog
 from web.common import ApiError
 
 log = logging.getLogger("dilus-bot.web.admin")
@@ -128,6 +129,59 @@ class Admin:
                 "target": r["target_name"], "amount": r["amount"], "detail": r["detail"], "source": r["source"], "ts": r["ts"],
             })
         return {"kind": kind, "items": items}
+
+    # ------------------------------------------------------------------
+    # Eventos del servidor (entradas, salidas, mensajes, roles, perfil, voz...)
+    # ------------------------------------------------------------------
+    EVENTS_PAGE = 50
+
+    async def events(self, gid: int, uid: int, kind, query, before) -> dict:
+        await self._actor(gid, uid)
+        where, args = ["guild_id = ?"], [gid]
+        if kind in eventlog.CATEGORIES:
+            kinds = eventlog.kinds_in(kind)
+            where.append(f"kind IN ({','.join('?' * len(kinds))})")
+            args += kinds
+        else:
+            kind = "all"
+        q = str(query or "").strip()[:40]
+        if q:
+            if q.isdigit() and len(q) >= 15:
+                where.append("user_id = ?")
+                args.append(int(q))
+            else:
+                like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                where.append("(user_name LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\' OR channel_name LIKE ? ESCAPE '\\')")
+                args += [like, like, like]
+        if str(before or "").isdigit():
+            where.append("id < ?")
+            args.append(int(before))
+        rows = await self.svc.db.fetchall(
+            f"SELECT * FROM event_log WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?", (*args, self.EVENTS_PAGE + 1)
+        )
+        more = len(rows) > self.EVENTS_PAGE
+        rows = rows[: self.EVENTS_PAGE]
+        items = []
+        for r in rows:
+            title, emoji, cat = eventlog.EVENTS.get(r["kind"], (r["kind"], "📋", "server"))
+            try:
+                raw = json.loads(r["extra"]) if r["extra"] else {}
+            except ValueError:
+                raw = {}
+            extra = {k: v for k, v in raw.items() if k in ("before", "after", "attachments") and v is not None}
+            for k in ("img", "old_img"):   # solo imágenes del CDN de Discord (el panel no carga nada de otros sitios)
+                if isinstance(raw.get(k), str) and raw[k].startswith(eventlog.CDN_PREFIX):
+                    extra[k] = raw[k]
+            items.append({
+                "id": r["id"], "kind": r["kind"], "title": title, "emoji": emoji, "category": cat,
+                "user": r["user_name"], "user_id": str(r["user_id"]) if r["user_id"] else None,
+                "channel": r["channel_name"], "detail": r["detail"], "extra": extra, "ts": r["ts"],
+            })
+        return {
+            "kind": kind, "items": items, "next": rows[-1]["id"] if more else None,
+            "categories": [{"id": k, "name": v[0], "emoji": v[1]} for k, v in eventlog.CATEGORIES.items()],
+            "retention_days": eventlog.RETENTION_DAYS,
+        }
 
     # ------------------------------------------------------------------
     # Ajustes: canal de features (juegos que llenan el chat)
