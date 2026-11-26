@@ -20,6 +20,7 @@ ACTIONS = {
     "untimeout": ("Quitó timeout", "🔊", "moderation"),
     "kick": ("Expulsó", "👢", "moderation"),
     "ban": ("Baneó", "🔨", "moderation"),
+    "features_channel": ("Cambió el canal de features", "🎰", "settings"),
 }
 KEEP_PER_GUILD = 1000
 

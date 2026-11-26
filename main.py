@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from utils.db import Database
 from utils.embeds import BRAND_NAME, error
+from utils.features import WrongChannel, wrong_channel_embed
 
 load_dotenv()
 
@@ -90,6 +91,12 @@ class DilusBot(commands.Bot):
         await super().close()
 
     async def on_tree_error(self, interaction: discord.Interaction, err: app_commands.AppCommandError):
+        if isinstance(err, WrongChannel):
+            try:
+                await interaction.response.send_message(embed=wrong_channel_embed(err.channel_id), ephemeral=True)
+            except discord.HTTPException:
+                pass
+            return
         if isinstance(err, app_commands.MissingPermissions):
             msg = "No tenés permisos para usar este comando."
         elif isinstance(err, app_commands.BotMissingPermissions):

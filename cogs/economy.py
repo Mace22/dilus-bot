@@ -10,6 +10,7 @@ from utils import adminlog
 from utils import work as W
 from utils import work_render as WR
 from utils.embeds import error, make_embed, ok
+from utils.features import features_only
 
 # ---------- Configuración (tocá estos valores a gusto) ----------
 COIN = "🪙"
@@ -338,6 +339,7 @@ class Economy(commands.Cog):
     )
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 4.0, key=lambda i: (i.guild_id, i.user.id))
+    @features_only()
     async def apostar(self, interaction: discord.Interaction, monto: app_commands.Range[int, MIN_BET, MAX_BET], lado: app_commands.Choice[str]):
         gid, uid = interaction.guild_id, interaction.user.id
         if not await self.add(gid, uid, -monto):
@@ -355,6 +357,7 @@ class Economy(commands.Cog):
     @app_commands.command(name="slots", description="Tragamonedas: ¡tres iguales pagan un montón!")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 4.0, key=lambda i: (i.guild_id, i.user.id))
+    @features_only()
     async def slots(self, interaction: discord.Interaction, monto: app_commands.Range[int, MIN_BET, MAX_BET]):
         gid, uid = interaction.guild_id, interaction.user.id
         if not await self.add(gid, uid, -monto):

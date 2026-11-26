@@ -145,6 +145,35 @@ function adminModeration(ov, refreshStats) {
     h("div", { class: "row" }, go));
 }
 
+/* --- pestaña: ajustes (canal de features) --- */
+function adminSettings() {
+  const box = h("div", { class: "card admin-form" }, h("div", { class: "skeleton", style: { height: "120px" } }));
+  (async () => {
+    const data = await gget("/api/admin/settings");
+    const select = h("select", { class: "txt", "aria-label": "Canal de features" },
+      [h("option", { value: "", text: "Sin restricción (en todos los canales)" }),
+        ...data.channels.map(c => h("option", { value: c.id, text: `#${c.name}${c.category ? ` · ${c.category}` : ""}` }))]);
+    select.value = data.features_channel || "";
+    let saved = select.value;
+    const save = h("button", { class: "btn btn-primary", disabled: true }, "Guardar canal");
+    select.addEventListener("change", () => { save.disabled = select.value === saved; });
+    save.addEventListener("click", async () => {
+      save.disabled = true;
+      try {
+        const r = await gpost("/api/admin/features-channel", { channel: select.value || null });
+        saved = r.features_channel || "";
+        toast(r.name ? `Canal de features: #${r.name}` : "Quitaste la restricción de canal", "ok");
+      } catch (e) { toast(e.message, "err"); save.disabled = select.value === saved; }
+    });
+    box.replaceChildren(
+      h("h3", { text: "Canal de features" }),
+      h("p", { class: "note", text: "Blackjack, ruleta, slots, apostar y duelos de cara o cruz solo se pueden usar en este canal de Discord. En otro canal, el bot avisa dónde jugar. Los juegos del panel web no se ven afectados. También se puede cambiar con /config features." }),
+      h("div", { class: "field" }, h("label", { text: "Canal" }), select),
+      h("div", { class: "row" }, save));
+  })().catch(e => box.replaceChildren(h("div", { class: "empty" }, h("p", { text: e.message }))));
+  return box;
+}
+
 /* --- pestaña: logs --- */
 async function adminLogs(box, kind) {
   box.replaceChildren(h("div", { class: "skeleton", style: { height: "120px" } }));
@@ -177,9 +206,10 @@ VIEWS.admin = async (root, token) => {
   const tabsEl = h("div", { class: "tabs" });
   function show(id) {
     tab = id;
-    tabsEl.replaceChildren(...[["eco", "💰 Economía"], ["mod", "🛡️ Moderación"], ["logs", "📜 Logs"]].map(([k, label]) => h("button", { class: k === tab ? "on" : "", text: label, onclick: () => show(k) })));
+    tabsEl.replaceChildren(...[["eco", "💰 Economía"], ["mod", "🛡️ Moderación"], ["settings", "⚙️ Ajustes"], ["logs", "📜 Logs"]].map(([k, label]) => h("button", { class: k === tab ? "on" : "", text: label, onclick: () => show(k) })));
     if (id === "eco") body.replaceChildren(adminEconomy(ov, refreshStats));
     else if (id === "mod") body.replaceChildren(adminModeration(ov, refreshStats));
+    else if (id === "settings") body.replaceChildren(adminSettings());
     else {
       const list = h("div", {});
       const chips = h("div", { class: "tabs" }, [["all", "Todo"], ["economy", "🪙 Economía"], ["moderation", "🛡️ Moderación"]].map(([k, label]) =>

@@ -19,6 +19,7 @@ Bot de Discord en Python (discord.py 2.7) pensado para servidores chicos.
 | 📜 **Logs** | Mensajes borrados/editados, entradas/salidas, bans, timeouts y cambios de roles en un canal (`/config logs`) |
 | 🎁 **Comunidad** | `/sorteo crear\|terminar`, `/ticket panel`, `/encuesta` |
 | 👋 **Bienvenida** | `/config bienvenida\|despedida\|levelup\|autorole\|ver` |
+| 🎰 **Canal de features** | `/config features [canal]`: Blackjack, ruleta, slots, apostar y duelos de cara o cruz solo se pueden usar en ese canal (sin canal = en todos). También se elige desde el panel web → Admin → **Ajustes** |
 | 🔧 **Utilidades** | `/ayuda`, `/ping`, `/avatar`, `/serverinfo` |
 
 ## 1. Crear el bot en Discord

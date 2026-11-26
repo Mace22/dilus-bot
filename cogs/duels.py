@@ -21,6 +21,7 @@ from discord.ext import commands, tasks
 from cogs.economy import COIN, MAX_BET, MIN_BET, fmt
 from utils import coin_anim
 from utils.embeds import error, make_embed
+from utils.features import features_only
 
 log = logging.getLogger("dilus-bot.duels")
 
@@ -352,6 +353,7 @@ class Duels(commands.Cog):
     @caracruz.command(name="duelo", description="Desafiá a alguien a cara o cruz: el ganador se lleva todo")
     @app_commands.describe(usuario="A quién desafiás", monto=f"Monedas que apostás cada uno (mínimo {MIN_BET})", lado="El lado que elegís (el otro se queda con el contrario)")
     @app_commands.choices(lado=[app_commands.Choice(name="Cara", value="cara"), app_commands.Choice(name="Cruz", value="cruz")])
+    @features_only()
     async def duelo(self, interaction: discord.Interaction, usuario: discord.Member, monto: app_commands.Range[int, MIN_BET, MAX_BET], lado: app_commands.Choice[str]):
         try:
             row = await self.create(interaction.guild, interaction.user, usuario, monto, lado.value, source="discord")

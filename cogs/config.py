@@ -4,7 +4,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from utils import adminlog
 from utils.embeds import error, make_embed, ok
+from utils.features import GAMES_TEXT
 
 log = logging.getLogger("dilus-bot.config")
 
@@ -129,6 +131,30 @@ class Config(commands.Cog):
         else:
             await interaction.response.send_message(embed=ok("Canales temporales desactivados."))
 
+    @config.command(name="features", description="Canal donde se pueden usar los juegos que llenan el chat (sin canal = en todos)")
+    @app_commands.describe(canal="Canal de features (dejalo vacío para quitar la restricción)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def features(self, interaction: discord.Interaction, canal: discord.TextChannel | None = None):
+        if canal is not None:
+            perms = canal.permissions_for(interaction.guild.me)
+            if not (perms.view_channel and perms.send_messages):
+                return await interaction.response.send_message(
+                    embed=error(f"No tengo permiso para escribir en {canal.mention}."), ephemeral=True
+                )
+        await self.bot.db.set_setting(interaction.guild_id, "features_channel", canal.id if canal else None)
+        if canal:
+            await interaction.response.send_message(
+                embed=ok(f"Canal de features: {canal.mention}\n{GAMES_TEXT} solo se podrán usar ahí.")
+            )
+        else:
+            await interaction.response.send_message(
+                embed=ok("Canal de features quitado: los juegos se pueden usar en cualquier canal.")
+            )
+        await adminlog.record(
+            self.bot, interaction.guild, actor=interaction.user, action="features_channel",
+            detail=f"#{canal.name}" if canal else "Sin restricción", source="discord",
+        )
+
     @config.command(name="ver", description="Ver la configuración actual")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def view(self, interaction: discord.Interaction):
@@ -144,6 +170,7 @@ class Config(commands.Cog):
         autorole = await db.get_setting(gid, "autorole")
         logs = await db.get_setting(gid, "log_channel")
         tempvoice = await db.get_setting(gid, "tempvoice_channel")
+        features = await db.get_setting(gid, "features_channel")
         embed = make_embed("⚙️ Configuración")
         embed.add_field(name="Bienvenida", value=ch(welcome))
         embed.add_field(name="Despedida", value=ch(goodbye))
@@ -151,6 +178,7 @@ class Config(commands.Cog):
         embed.add_field(name="Autorole", value=f"<@&{autorole}>" if autorole else "—")
         embed.add_field(name="Logs", value=ch(logs))
         embed.add_field(name="Voz temporal (lobby)", value=ch(tempvoice))
+        embed.add_field(name="Canal de features", value=ch(features) if features else "todos los canales")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

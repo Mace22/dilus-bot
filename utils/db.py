@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
     ticket_category INTEGER,
     ticket_staff_role INTEGER,
     log_channel INTEGER,
-    tempvoice_channel INTEGER
+    tempvoice_channel INTEGER,
+    features_channel INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS giveaways (
@@ -195,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_casino_log_user ON casino_log (guild_id, user_id,
 MIGRATIONS = {
     "log_channel": "INTEGER",
     "tempvoice_channel": "INTEGER",
+    "features_channel": "INTEGER",
 }
 
 # Columnas permitidas en guild_settings (evita inyección SQL en set_setting)
@@ -208,6 +210,7 @@ SETTINGS = {
     "ticket_staff_role",
     "log_channel",
     "tempvoice_channel",
+    "features_channel",
 }
 
 

@@ -130,6 +130,40 @@ class Admin:
         return {"kind": kind, "items": items}
 
     # ------------------------------------------------------------------
+    # Ajustes: canal de features (juegos que llenan el chat)
+    # ------------------------------------------------------------------
+    async def settings(self, gid: int, uid: int) -> dict:
+        guild, _ = await self._actor(gid, uid)
+        fid = await self.svc.db.get_setting(gid, "features_channel")
+        me = guild.me
+        channels = []
+        for c in guild.text_channels:
+            perms = c.permissions_for(me)
+            if perms.view_channel and perms.send_messages:
+                channels.append({"id": str(c.id), "name": c.name, "category": c.category.name if c.category else None})
+        current = str(fid) if fid and guild.get_channel(fid) else None
+        return {"features_channel": current, "channels": channels}
+
+    async def set_features_channel(self, gid: int, uid: int, channel) -> dict:
+        guild, actor = await self._actor(gid, uid)
+        ch = None
+        if channel not in (None, ""):
+            if not isinstance(channel, str) or not channel.isdigit():
+                raise ApiError("Elegí un canal válido.")
+            ch = guild.get_channel(int(channel))
+            if not isinstance(ch, discord.TextChannel):
+                raise ApiError("Ese canal no existe o no es de texto.", 404)
+            perms = ch.permissions_for(guild.me)
+            if not (perms.view_channel and perms.send_messages):
+                raise ApiError("No tengo permiso para escribir en ese canal.", 409)
+        await self.svc.db.set_setting(gid, "features_channel", ch.id if ch else None)
+        await adminlog.record(
+            self.svc.bot, guild, actor=actor, action="features_channel",
+            detail=f"#{ch.name}" if ch else "Sin restricción", source="web",
+        )
+        return {"features_channel": str(ch.id) if ch else None, "name": ch.name if ch else None}
+
+    # ------------------------------------------------------------------
     # Economía: dar / quitar monedas
     # ------------------------------------------------------------------
     async def coins(self, gid: int, uid: int, target, amount, reason) -> dict:

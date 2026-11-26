@@ -10,6 +10,7 @@ from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFilter
 
 from utils.embeds import BRAND_COLOR, error
+from utils.features import features_only
 from utils.fonts import fit_font, get_font
 
 log = logging.getLogger("dilus-bot.blackjack")
@@ -460,6 +461,7 @@ class Blackjack(commands.Cog):
     @app_commands.command(name="blackjack", description="🃏 Jugá al Blackjack contra el dealer apostando monedas")
     @app_commands.describe(apuesta=f"Monedas a apostar (mínimo {MIN_BET}, sin máximo)")
     @app_commands.guild_only()
+    @features_only()
     async def blackjack(self, interaction: discord.Interaction, apuesta: app_commands.Range[int, MIN_BET, MAX_BET]):
         game, err = await self.deal(interaction.guild_id, interaction.user, apuesta)
         if err:

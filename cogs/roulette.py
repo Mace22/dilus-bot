@@ -10,6 +10,7 @@ from discord.ext import commands
 
 from utils import roulette as rl
 from utils.embeds import error, ok
+from utils.features import features_only
 
 log = logging.getLogger("dilus-bot.roulette")
 
@@ -674,6 +675,7 @@ class Roulette(commands.Cog):
     @app_commands.command(name="ruleta", description="🎡 Abrí una mesa de ruleta: todo el chat puede apostar con sus monedas")
     @app_commands.describe(tiempo=f"Segundos que la mesa queda abierta para apostar (por defecto {BET_TIME})")
     @app_commands.guild_only()
+    @features_only()
     async def ruleta(self, interaction: discord.Interaction, tiempo: app_commands.Range[int, 20, 120] = BET_TIME):
         await self.open_table(interaction, tiempo)
 
