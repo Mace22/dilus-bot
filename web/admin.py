@@ -169,7 +169,7 @@ class Admin:
                 raw = json.loads(r["extra"]) if r["extra"] else {}
             except ValueError:
                 raw = {}
-            extra = {k: v for k, v in raw.items() if k in ("before", "after", "attachments") and v is not None}
+            extra = {k: v for k, v in raw.items() if k in ("before", "after", "attachments", "by", "reason") and v is not None}
             for k in ("img", "old_img"):   # solo imágenes del CDN de Discord (el panel no carga nada de otros sitios)
                 if isinstance(raw.get(k), str) and raw[k].startswith(eventlog.CDN_PREFIX):
                     extra[k] = raw[k]

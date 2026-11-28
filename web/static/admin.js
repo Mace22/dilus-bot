@@ -207,17 +207,28 @@ function adminSettings() {
 /* --- eventos del servidor (entradas, salidas, mensajes, roles, perfil, voz...) --- */
 function eventRow(it) {
   const x = it.extra || {};
-  const imgs = [x.old_img, x.img].filter(Boolean).map(src => h("img", { class: "avatar", src, alt: "", style: { width: "38px", height: "38px" } }));
-  const detail = it.kind === "message_delete" ? (it.detail || (x.attachments ? "(sin texto)" : "")) : (x.before == null ? it.detail : "");
+  const small = text => h("small", { text });
+  const lines = [];
+  if (x.before != null && x.after != null) {            // mensaje editado, nombre, apodo, canal renombrado
+    lines.push(small(`Antes: ${x.before}`), small(`Después: ${x.after}`));
+  } else if (it.kind === "message_delete") {
+    if (it.detail) lines.push(small(it.detail));
+  } else if (it.detail) {
+    lines.push(small(it.detail));
+  }
+  if (x.attachments) lines.push(small(`📎 ${x.attachments} adjunto(s)`));
+  if (x.by) lines.push(small(`Por: ${x.by}`));
+  if (x.reason) lines.push(small(`Motivo: ${x.reason}`));
+  const pic = (src, label) => h("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" } },
+    h("img", { class: "avatar", src, alt: label, title: label, style: { width: "44px", height: "44px" } }), h("small", { text: label }));
+  const avatars = x.old_img && x.img ? [pic(x.old_img, "Antes"), "→", pic(x.img, "Ahora")]
+    : (x.img ? [pic(x.img, it.kind === "member_join" ? "Avatar" : "Ahora")] : []);
   return h("div", { class: `log-row ${it.category}` },
     h("div", { class: "log-ic", text: it.emoji }),
     h("div", { class: "log-main" },
       h("div", {}, it.user ? h("b", { text: it.user }) : null, it.user ? " · " : null, it.title, it.channel ? ` en #${it.channel}` : null),
-      detail ? h("small", { text: detail }) : null,
-      x.before != null && it.kind === "message_edit" ? [h("small", { text: `Antes: ${x.before}` }), h("small", { text: `Después: ${x.after}` })] : null,
-      x.attachments ? h("small", { text: `📎 ${x.attachments} adjunto(s)` }) : null,
-      h("small", { text: fmtWhen(it.ts) })),
-    imgs.length ? h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, imgs.length > 1 ? [imgs[0], "→", imgs[1]] : imgs) : null);
+      lines, small(fmtWhen(it.ts))),
+    avatars.length ? h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, avatars) : null);
 }
 
 function adminEvents() {

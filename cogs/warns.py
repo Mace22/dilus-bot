@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from cogs.moderation import can_act_on
 from utils.embeds import error, make_embed, ok
+from utils.eventlog import audit_entry
 
 log = logging.getLogger("dilus-bot.warns")
 
@@ -160,16 +161,29 @@ class Warns(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
-        embed = make_embed("📤 Miembro se fue", f"{member.mention} ({member})", color=RED)
+        kick = await audit_entry(member.guild, discord.AuditLogAction.kick, member.id)
+        if kick:   # no se fue solo: lo expulsaron
+            embed = make_embed("👢 Miembro expulsado", f"{member.mention} ({member})", color=RED)
+            embed.add_field(name="Moderador", value=kick.user.mention)
+            embed.add_field(name="Motivo", value=clip(kick.reason), inline=False)
+        else:
+            embed = make_embed("📤 Miembro se fue", f"{member.mention} ({member})", color=RED)
         await self.send_log(member.guild, embed)
 
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User):
-        await self.send_log(guild, make_embed("🔨 Baneo", f"{user.mention} ({user})", color=RED))
+        embed = make_embed("🔨 Baneo", f"{user.mention} ({user})", color=RED)
+        if entry := await audit_entry(guild, discord.AuditLogAction.ban, user.id):
+            embed.add_field(name="Moderador", value=entry.user.mention)
+            embed.add_field(name="Motivo", value=clip(entry.reason), inline=False)
+        await self.send_log(guild, embed)
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
-        await self.send_log(guild, make_embed("♻️ Desbaneo", f"{user.mention} ({user})", color=GREEN))
+        embed = make_embed("♻️ Desbaneo", f"{user.mention} ({user})", color=GREEN)
+        if entry := await audit_entry(guild, discord.AuditLogAction.unban, user.id):
+            embed.add_field(name="Moderador", value=entry.user.mention)
+        await self.send_log(guild, embed)
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):

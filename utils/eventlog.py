@@ -5,9 +5,12 @@ No manda nada a Discord: el canal de `/config logs` lo sigue manejando cogs/warn
 
 Para que no crezca sin límite se conservan como máximo RETENTION_DAYS días y KEEP_PER_GUILD eventos por servidor.
 """
+import asyncio
 import json
 import logging
 import time
+
+import discord
 
 log = logging.getLogger("dilus-bot.eventlog")
 
@@ -20,6 +23,7 @@ TEXT_MAX = 1000
 EVENTS = {
     "member_join": ("Entró al servidor", "📥", "members"),
     "member_leave": ("Salió del servidor", "📤", "members"),
+    "member_kick": ("Fue expulsado", "👢", "members"),
     "member_ban": ("Fue baneado", "🔨", "members"),
     "member_unban": ("Fue desbaneado", "♻️", "members"),
     "timeout_on": ("Timeout aplicado", "🔇", "members"),
@@ -40,6 +44,9 @@ EVENTS = {
     "channel_delete": ("Canal borrado", "➖", "server"),
     "channel_update": ("Canal renombrado", "🛠️", "server"),
     "role_create": ("Rol creado", "🆕", "server"),
+    "role_update": ("Rol modificado", "🛠️", "server"),
+    "invite_create": ("Invitación creada", "🔗", "server"),
+    "invite_delete": ("Invitación borrada", "🔗", "server"),
     "role_delete": ("Rol borrado", "❌", "server"),
 }
 
@@ -73,6 +80,34 @@ def name_of(who) -> str | None:
     display = getattr(who, "display_name", None) or str(who)
     username = getattr(who, "name", None)
     return f"{display} ({username})" if username and username != display else display
+
+
+async def audit_entry(guild: discord.Guild, action: discord.AuditLogAction, target_id: int, *, within: int = 20):
+    """Busca en el registro de auditoría quién hizo `action` sobre `target_id` (kick, ban, borrar un canal...).
+
+    Devuelve la entrada o None (si no hay permiso de Ver el registro de auditoría, o no se encuentra).
+    """
+    if not guild.me.guild_permissions.view_audit_log:
+        return None
+    await asyncio.sleep(1)   # Discord tarda un instante en escribir la entrada
+    try:
+        async for entry in guild.audit_logs(limit=8, action=action):
+            if getattr(entry.target, "id", None) == target_id and (discord.utils.utcnow() - entry.created_at).total_seconds() <= within:
+                return entry
+    except discord.HTTPException:
+        pass
+    return None
+
+
+async def post_log(bot, guild: discord.Guild, embed: discord.Embed):
+    """Manda un embed al canal de logs de Discord (`/config logs`), si hay uno configurado."""
+    channel_id = await bot.db.get_setting(guild.id, "log_channel")
+    channel = guild.get_channel(channel_id) if channel_id else None
+    if channel:
+        try:
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
 
 
 async def record(bot, guild_id: int, kind: str, *, user=None, channel=None, detail: str = "", **extra):
